@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Multi-target build for the monorepo: `api`, `worker`, `web` (and `build` for migrations).
 
-FROM node:22-bookworm-slim AS base
+FROM node:24.15.0-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH NEXT_TELEMETRY_DISABLED=1
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/* \
   && corepack enable
@@ -37,7 +37,7 @@ WORKDIR /app/apps/worker
 USER node
 CMD ["node", "dist/main.js"]
 
-FROM node:22-bookworm-slim AS web
+FROM node:24.15.0-bookworm-slim AS web
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
