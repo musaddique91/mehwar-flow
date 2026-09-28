@@ -1,0 +1,170 @@
+# Mehwar Flow — local / single-host stack.
+#   ./scripts/generate-env.sh   # once: creates .env with random secrets
+#   docker compose up -d --build
+# Web: http://localhost:3000  API: http://localhost:4000  MinIO console: http://localhost:9001
+# Mailpit (dev email): http://localhost:8025
+
+name: mehwar-flow
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://mehwar_app:${POSTGRES_APP_PASSWORD:?run scripts/generate-env.sh}@postgres:5432/mehwar
+  REDIS_URL: redis://redis:6379
+  S3_ENDPOINT: http://minio:9000
+  S3_PUBLIC_URL: ${S3_PUBLIC_URL:-http://localhost:9000}
+  S3_REGION: us-east-1
+  S3_BUCKET: ${S3_BUCKET:-mehwar-media}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:?run scripts/generate-env.sh}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:?run scripts/generate-env.sh}
+  SMTP_URL: smtp://mailpit:1025
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mehwar
+      POSTGRES_USER: mehwar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/generate-env.sh}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    ports:
+      - '127.0.0.1:5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mehwar -d mehwar']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF persistence so scheduled (delayed) jobs survive restarts.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - redis-data:/data
+    ports:
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    # The upstream minio/minio images are no longer published; pgsty/minio is a maintained
+    # community build of the same server. Override with MINIO_IMAGE if you prefer another.
+    image: ${MINIO_IMAGE:-pgsty/minio:latest}
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mehwar-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?run scripts/generate-env.sh}
+    volumes:
+      - minio-data:/data
+    ports:
+      - '9000:9000'
+      - '127.0.0.1:9001:9001'
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-pgsty/mc:latest}
+    depends_on:
+      - minio
+    entrypoint: ['/bin/sh', '/init.sh']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mehwar-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-mehwar-media}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+    volumes:
+      - ./docker/minio/init.sh:/init.sh:ro
+    restart: 'no'
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8025:8025'
+      - '127.0.0.1:1025:1025'
+
+  migrate:
+    build:
+      context: .
+      target: build
+    command: ['pnpm', '--filter', '@mehwar/db', 'migrate:deploy']
+    environment:
+      DATABASE_URL: postgresql://mehwar_app:${POSTGRES_APP_PASSWORD}@postgres:5432/mehwar
+      DIRECT_DATABASE_URL: postgresql://mehwar:${POSTGRES_PASSWORD}@postgres:5432/mehwar
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      target: api
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      PORT: 4000
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?run scripts/generate-env.sh}
+      MASTER_KEYS: ${MASTER_KEYS:?run scripts/generate-env.sh}
+      MASTER_KEY_CURRENT_VERSION: ${MASTER_KEY_CURRENT_VERSION:-1}
+      # The browser reaches the API through the web app's /api proxy.
+      REFRESH_COOKIE_PATH: /api/auth
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - '127.0.0.1:4000:4000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      MASTER_KEYS: ${MASTER_KEYS}
+      MASTER_KEY_CURRENT_VERSION: ${MASTER_KEY_CURRENT_VERSION:-1}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      target: web
+      args:
+        API_INTERNAL_URL: http://api:4000
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

@@ -1,0 +1,22 @@
+{
+  "name": "@mehwar/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json && node --watch dist/main.js",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@mehwar/db": "workspace:*",
+    "@mehwar/shared": "workspace:*",
+    "bullmq": "^5.52.0",
+    "ioredis": "^5.6.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}
