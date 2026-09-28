@@ -1,9 +1,129 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  color-scheme: light dark;
+  --bg: #f6f5fb;
+  --bg-elevated: #ffffff;
+  --fg: #0f1020;
+  --muted: #62647a;
+  --card: rgb(255 255 255 / 0.72);
+  --card-strong: rgb(255 255 255 / 0.92);
+  --line: rgb(15 16 32 / 0.08);
+  --ring: rgb(168 85 247 / 0.45);
+  --blob-a: #c4b5fd;
+  --blob-b: #f9a8d4;
+  --blob-c: #fdba74;
 }
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+.dark {
+  --bg: #07070f;
+  --bg-elevated: #0e0e1a;
+  --fg: #f4f4fb;
+  --muted: #9a9bb5;
+  --card: rgb(20 20 36 / 0.6);
+  --card-strong: rgb(24 24 42 / 0.9);
+  --line: rgb(255 255 255 / 0.08);
+  --ring: rgb(192 132 252 / 0.5);
+  --blob-a: #6d28d9;
+  --blob-b: #be185d;
+  --blob-c: #c2410c;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-elevated: var(--bg-elevated);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-card: var(--card);
+  --color-card-strong: var(--card-strong);
+  --color-line: var(--line);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@theme {
+  --color-brand-1: #8b5cf6;
+  --color-brand-2: #d946ef;
+  --color-brand-3: #f97316;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-marquee: marquee 32s linear infinite;
+  --animate-gradient: gradient-pan 8s ease infinite;
+
+  @keyframes shimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes gradient-pan {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: rgb(217 70 239 / 0.3);
+  }
+}
+
+@utility brand-gradient {
+  background-image: linear-gradient(120deg, #8b5cf6, #d946ef 50%, #f97316);
+}
+
+@utility brand-text {
+  background-image: linear-gradient(120deg, #a78bfa, #e879f9 45%, #fb923c);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: var(--animate-gradient);
+}
+
+@utility glass {
+  background: var(--card);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
