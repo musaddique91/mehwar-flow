@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": ">=24.15.0"
+    "node": ">=26.3.0"
   },
   "scripts": {
     "build": "turbo run build",
@@ -18,7 +18,7 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.0.0",
     "prettier": "^3.5.3",
     "turbo": "^2.5.0",
     "typescript": "~5.8.3"

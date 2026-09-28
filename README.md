@@ -60,7 +60,7 @@ docker compose down -v             # stop and DELETE all data (DB, Redis, MinIO)
 ## Local development (hot reload, without app containers)
 
 ```bash
-corepack enable                    # provides pnpm (requires Node 24.15.0, see .nvmrc)
+corepack enable                    # provides pnpm (requires Node 26.3.0, see .nvmrc)
 pnpm install
 ./scripts/generate-env.sh          # if you don't have .env yet
 docker compose up -d postgres redis minio minio-init mailpit
