@@ -140,6 +140,7 @@ export class AuthService {
       name: user.name,
       timezone: user.timezone,
       xPremium: user.xPremium,
+      brandVoice: user.brandVoice,
       createdAt: user.createdAt.toISOString(),
     };
   }

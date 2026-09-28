@@ -228,6 +228,6 @@ describe('rate limiting', () => {
 describe('health', () => {
   it('reports database status', async () => {
     const res = await request(app.getHttpServer()).get('/health').expect(200);
-    expect(res.body).toEqual({ status: 'ok', database: 'up' });
+    expect(res.body).toEqual({ status: 'ok', database: 'up', redis: 'up' });
   });
 });

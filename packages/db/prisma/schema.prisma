@@ -18,16 +18,18 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  email        String    @unique
-  passwordHash String    @map("password_hash")
-  name         String
-  timezone     String    @default("UTC")
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  name            String
+  timezone        String    @default("UTC")
   /// X Premium subscribers may post up to 25,000 characters.
-  xPremium     Boolean   @default(false) @map("x_premium")
+  xPremium        Boolean   @default(false) @map("x_premium")
   emailVerifiedAt DateTime? @map("email_verified_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  /// Brand voice guidance used by the AI assistant.
+  brandVoice      String?   @map("brand_voice")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   organization Organization?
   sessions     Session[]
@@ -37,39 +39,44 @@ model User {
 
 /// Tenant boundary. MVP: one personal organization per user.
 model Organization {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  ownerId   String   @unique @map("owner_id") @db.Uuid
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  ownerId        String   @unique @map("owner_id") @db.Uuid
   /// Per-organization data encryption key, wrapped by the master key (envelope encryption).
-  wrappedDataKey  String @map("wrapped_data_key")
-  dataKeyVersion  Int    @map("data_key_version")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  wrappedDataKey String   @map("wrapped_data_key")
+  dataKeyVersion Int      @map("data_key_version")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  owner       User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  channels    Channel[]
-  credentials ChannelCredential[]
-  media       MediaAsset[]
-  posts       Post[]
-  postTargets PostTarget[]
-  auditLogs   AuditLog[]
+  owner         User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  channels      Channel[]
+  credentials   ChannelCredential[]
+  media         MediaAsset[]
+  posts         Post[]
+  postTargets   PostTarget[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  postingSlots  PostingSlot[]
+  metrics       MetricSnapshot[]
+  aiUsage       AiUsage[]
+  subscription  Subscription?
 
   @@map("organizations")
 }
 
 /// Refresh-token sessions. Only a SHA-256 hash of the token is stored; tokens rotate on every use.
 model Session {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @map("user_id") @db.Uuid
-  tokenHash   String    @unique @map("token_hash")
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
   /// All tokens rotated from the same login share a family; reuse of an old token revokes it.
-  familyId    String    @map("family_id") @db.Uuid
-  userAgent   String?   @map("user_agent")
-  ip          String?
-  expiresAt   DateTime  @map("expires_at")
-  revokedAt   DateTime? @map("revoked_at")
-  replacedById String?  @map("replaced_by_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at")
+  familyId     String    @map("family_id") @db.Uuid
+  userAgent    String?   @map("user_agent")
+  ip           String?
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -113,6 +120,7 @@ model Channel {
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   credential   ChannelCredential?
   postTargets  PostTarget[]
+  metrics      MetricSnapshot[]
 
   @@unique([organizationId, platform, externalId])
   @@index([organizationId])
@@ -150,20 +158,23 @@ enum MediaStatus {
 }
 
 model MediaAsset {
-  id             String      @id @default(uuid()) @db.Uuid
-  organizationId String      @map("organization_id") @db.Uuid
+  id              String      @id @default(uuid()) @db.Uuid
+  organizationId  String      @map("organization_id") @db.Uuid
   /// Object key in the MinIO/S3 bucket, always prefixed with the organization id.
-  storageKey     String      @unique @map("storage_key")
-  fileName       String      @map("file_name")
-  mimeType       String      @map("mime_type")
-  sizeBytes      BigInt      @map("size_bytes")
-  width          Int?
-  height         Int?
-  durationSec    Float?      @map("duration_sec")
-  thumbnailKey   String?     @map("thumbnail_key")
-  status         MediaStatus @default(UPLOADING)
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
+  storageKey      String      @unique @map("storage_key")
+  fileName        String      @map("file_name")
+  mimeType        String      @map("mime_type")
+  sizeBytes       BigInt      @map("size_bytes")
+  width           Int?
+  height          Int?
+  durationSec     Float?      @map("duration_sec")
+  thumbnailKey    String?     @map("thumbnail_key")
+  /// Publicly readable copy (under `public/`) that pull-based platforms fetch.
+  publicKey       String?     @map("public_key")
+  processingError String?     @map("processing_error")
+  status          MediaStatus @default(UPLOADING)
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   posts        PostMedia[]
@@ -186,6 +197,8 @@ model Post {
   organizationId String     @map("organization_id") @db.Uuid
   /// Base text shared by all networks; per-network overrides live on PostTarget.
   text           String     @default("")
+  /// Posted as the first comment where supported (Instagram, Facebook).
+  firstComment   String?    @map("first_comment")
   status         PostStatus @default(DRAFT)
   /// UTC instant; `timezone` keeps the zone the user picked the time in.
   scheduledAt    DateTime?  @map("scheduled_at")
@@ -230,9 +243,10 @@ model PostTarget {
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  post         Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
-  channel      Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  post         Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  channel      Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  metrics      MetricSnapshot[]
 
   @@unique([postId, channelId])
   /// Used by the scheduler sweeper to find due targets.
@@ -246,7 +260,8 @@ model PostMedia {
   position Int
 
   post  Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
-  media MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  // Deleting in-use media is blocked by the API; the cascade lets account deletion remove everything.
+  media MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
 
   @@id([postId, mediaId])
   @@map("post_media")
@@ -267,4 +282,98 @@ model AuditLog {
 
   @@index([organizationId, createdAt])
   @@map("audit_logs")
+}
+
+enum NotificationKind {
+  POST_PUBLISHED
+  POST_FAILED
+  CHANNEL_NEEDS_RECONNECT
+  CHANNEL_CONNECTED
+  SYSTEM
+}
+
+model Notification {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  kind           NotificationKind
+  title          String
+  body           String?
+  link           String?
+  readAt         DateTime?        @map("read_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("notifications")
+}
+
+/// Recurring weekly posting times ("queue slots") used by "add to next free slot".
+model PostingSlot {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  /// 0 = Sunday ... 6 = Saturday, in the user's time zone.
+  weekday        Int
+  /// Minutes after local midnight.
+  minuteOfDay    Int      @map("minute_of_day")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, weekday, minuteOfDay])
+  @@map("posting_slots")
+}
+
+/// Point-in-time engagement numbers for a published post target, or account followers
+/// (postTargetId null).
+model MetricSnapshot {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  channelId      String   @map("channel_id") @db.Uuid
+  postTargetId   String?  @map("post_target_id") @db.Uuid
+  capturedAt     DateTime @default(now()) @map("captured_at")
+  impressions    Int      @default(0)
+  likes          Int      @default(0)
+  comments       Int      @default(0)
+  shares         Int      @default(0)
+  views          Int      @default(0)
+  followers      Int?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel      Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  postTarget   PostTarget?  @relation(fields: [postTargetId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, capturedAt])
+  @@index([postTargetId, capturedAt])
+  @@map("metric_snapshots")
+}
+
+model AiUsage {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  feature        String
+  inputTokens    Int      @map("input_tokens")
+  outputTokens   Int      @map("output_tokens")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("ai_usage")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid()) @db.Uuid
+  organizationId       String    @unique @map("organization_id") @db.Uuid
+  plan                 String    @default("free")
+  status               String    @default("active")
+  stripeCustomerId     String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
 }

@@ -25,6 +25,7 @@ export const updateProfileSchema = z
     name: z.string().trim().min(1).max(100),
     timezone: z.string().refine(isValidTimeZone, 'Unknown time zone'),
     xPremium: z.boolean(),
+    brandVoice: z.string().max(1000).nullable(),
   })
   .partial();
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -41,6 +42,7 @@ export interface UserDto {
   name: string;
   timezone: string;
   xPremium: boolean;
+  brandVoice: string | null;
   createdAt: string;
 }
 

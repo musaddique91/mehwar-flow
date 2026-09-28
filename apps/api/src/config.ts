@@ -16,6 +16,18 @@ const envSchema = z.object({
   MASTER_KEY_CURRENT_VERSION: z.coerce.number().int().positive().default(1),
   /** Path of the refresh cookie as seen by the browser ("/api/auth" when proxied by the web app). */
   REFRESH_COOKIE_PATH: z.string().startsWith('/').default('/auth'),
+  REDIS_URL: z.string().url().default('redis://localhost:6379'),
+  /** Anthropic API key for the AI assistant (optional). */
+  ANTHROPIC_API_KEY: z.string().optional(),
+  AI_MODEL: z.string().default('claude-opus-5-5'),
+  /** Stripe billing (optional; without it everyone is on the self-hosted unlimited plan). */
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_PRO: z.string().optional(),
+  STRIPE_PRICE_BUSINESS: z.string().optional(),
+  /** Basic-auth credentials for the queue dashboard at /admin/queues (optional). */
+  ADMIN_USER: z.string().optional(),
+  ADMIN_PASSWORD: z.string().optional(),
   COOKIE_SECURE: z
     .enum(['true', 'false'])
     .optional()
