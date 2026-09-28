@@ -88,7 +88,10 @@ async function signup() {
   return { email, token, api: api() };
 }
 
-async function connectX(api: Awaited<ReturnType<typeof signup>>['api'], code = randomUUID()) {
+async function connectX(
+  api: Awaited<ReturnType<typeof signup>>['api'],
+  code: string = randomUUID(),
+) {
   const { body } = await api.post('/channels/connect/x').expect(201);
   const state = new URL(body.url).searchParams.get('state')!;
   const cb = await request(app.getHttpServer())
