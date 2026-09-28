@@ -53,9 +53,8 @@ services:
       retries: 10
 
   minio:
-    # The upstream minio/minio images are no longer published; pgsty/minio is a maintained
-    # community build of the same server. Override with MINIO_IMAGE if you prefer another.
-    image: ${MINIO_IMAGE:-pgsty/minio:latest}
+    # Override with MINIO_IMAGE (e.g. a pinned RELEASE tag) if needed.
+    image: ${MINIO_IMAGE:-minio/minio:latest}
     restart: unless-stopped
     command: ['server', '/data', '--console-address', ':9001']
     environment:
@@ -68,7 +67,7 @@ services:
       - '127.0.0.1:9001:9001'
 
   minio-init:
-    image: ${MINIO_MC_IMAGE:-pgsty/mc:latest}
+    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
     depends_on:
       - minio
     entrypoint: ['/bin/sh', '/init.sh']
