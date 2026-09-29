@@ -124,7 +124,8 @@ export async function processMedia(
         },
       });
     } else if (media.mimeType.startsWith('video/')) {
-      const url = await storage.presignGet(media.storageKey, 3600);
+      // Internal endpoint: the public URL (e.g. localhost:9000) isn't reachable from this container.
+      const url = await storage.presignGetInternal(media.storageKey, 3600);
       const probe = await probeVideo(tools, url);
       const ext = media.fileName.split('.').pop()?.toLowerCase() || 'mp4';
       const publicKey = storageKeys.public(job.organizationId, media.id, ext);

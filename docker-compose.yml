@@ -15,7 +15,27 @@ x-app-env: &app-env
   S3_BUCKET: ${S3_BUCKET:-mehwar-media}
   S3_ACCESS_KEY: ${S3_ACCESS_KEY:?run scripts/generate-env.sh}
   S3_SECRET_KEY: ${S3_SECRET_KEY:?run scripts/generate-env.sh}
-  SMTP_URL: smtp://mailpit:1025
+  SMTP_URL: ${SMTP_URL:-smtp://mailpit:1025}
+  MAIL_FROM: ${MAIL_FROM:-Mehwar Flow <no-reply@mehwar.local>}
+  WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+  MASTER_KEYS: ${MASTER_KEYS:?run scripts/generate-env.sh}
+  MASTER_KEY_CURRENT_VERSION: ${MASTER_KEY_CURRENT_VERSION:-1}
+  # Social network developer apps (optional; a network is enabled when its pair is set).
+  # See docs/PLATFORM_SETUP.md.
+  X_CLIENT_ID: ${X_CLIENT_ID:-}
+  X_CLIENT_SECRET: ${X_CLIENT_SECRET:-}
+  META_CLIENT_ID: ${META_CLIENT_ID:-}
+  META_CLIENT_SECRET: ${META_CLIENT_SECRET:-}
+  THREADS_CLIENT_ID: ${THREADS_CLIENT_ID:-}
+  THREADS_CLIENT_SECRET: ${THREADS_CLIENT_SECRET:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  TIKTOK_CLIENT_ID: ${TIKTOK_CLIENT_ID:-}
+  TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
+  SNAPCHAT_CLIENT_ID: ${SNAPCHAT_CLIENT_ID:-}
+  SNAPCHAT_CLIENT_SECRET: ${SNAPCHAT_CLIENT_SECRET:-}
+  SNAPCHAT_PUBLISH_URL: ${SNAPCHAT_PUBLISH_URL:-}
+  FEATURE_SNAPCHAT: ${FEATURE_SNAPCHAT:-false}
 
 services:
   postgres:
@@ -109,13 +129,21 @@ services:
     environment:
       <<: *app-env
       PORT: 4000
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?run scripts/generate-env.sh}
-      MASTER_KEYS: ${MASTER_KEYS:?run scripts/generate-env.sh}
-      MASTER_KEY_CURRENT_VERSION: ${MASTER_KEY_CURRENT_VERSION:-1}
       # The browser reaches the API through the web app's /api proxy.
       REFRESH_COOKIE_PATH: /api/auth
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # AI assistant (optional)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-opus-5-5}
+      # Billing (optional; without it every account gets the unlimited self-hosted plan)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_BUSINESS: ${STRIPE_PRICE_BUSINESS:-}
+      # Queue dashboard at http://localhost:4000/admin/queues (optional)
+      ADMIN_USER: ${ADMIN_USER:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     ports:
       - '127.0.0.1:4000:4000'
     depends_on:
@@ -142,8 +170,8 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
-      MASTER_KEYS: ${MASTER_KEYS}
-      MASTER_KEY_CURRENT_VERSION: ${MASTER_KEY_CURRENT_VERSION:-1}
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      FFPROBE_PATH: /usr/bin/ffprobe
     depends_on:
       migrate:
         condition: service_completed_successfully

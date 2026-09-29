@@ -14,6 +14,10 @@
   --blob-a: #c4b5fd;
   --blob-b: #f9a8d4;
   --blob-c: #fdba74;
+  /* Data-viz categorical slots (validated reference palette; light steps). */
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-grid: rgb(15 16 32 / 0.08);
 }
 
 .dark {
@@ -28,6 +32,10 @@
   --blob-a: #6d28d9;
   --blob-b: #be185d;
   --blob-c: #c2410c;
+  /* Same hues stepped for the dark surface. */
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-grid: rgb(255 255 255 / 0.07);
 }
 
 @theme inline {

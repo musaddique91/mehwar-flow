@@ -22,11 +22,31 @@ export interface PreviewProps {
   text: string;
   name: string;
   handle: string;
+  /** Thumbnail of the first attached media, if any. */
+  mediaUrl?: string | null;
   className?: string;
 }
 
-/** Colourful placeholder standing in for the user's media until the media library ships. */
-function MediaPlaceholder({ platform, tall = false }: { platform: Platform; tall?: boolean }) {
+/** The attached media, or a colourful placeholder when nothing is attached yet. */
+function MediaPlaceholder({
+  platform,
+  tall = false,
+  url,
+}: {
+  platform: Platform;
+  tall?: boolean;
+  url?: string | null;
+}) {
+  if (url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt=""
+        className={cn('w-full object-cover', tall ? 'aspect-[9/16]' : 'aspect-square')}
+      />
+    );
+  }
   return (
     <div
       className={cn(
@@ -60,7 +80,7 @@ function RichText({ text, className }: { text: string; className?: string }) {
 
 const placeholder = 'Your post will appear here ✨';
 
-export function PostPreview({ platform, text, name, handle, className }: PreviewProps) {
+export function PostPreview({ platform, text, name, handle, mediaUrl, className }: PreviewProps) {
   const body = text.trim() || placeholder;
   const frame = 'rounded-2xl border border-line bg-elevated text-[14px] text-fg shadow-xl';
 
@@ -76,6 +96,14 @@ export function PostPreview({ platform, text, name, handle, className }: Preview
                 <span className="truncate text-muted">@{handle} · now</span>
               </div>
               <RichText text={body} className="mt-1 leading-snug" />
+              {mediaUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={mediaUrl}
+                  alt=""
+                  className="mt-2 max-h-72 w-full rounded-2xl border border-line object-cover"
+                />
+              )}
               <div className="mt-3 flex justify-between pr-6 text-muted">
                 <MessageCircle className="size-4" />
                 <Repeat2 className="size-4" />
@@ -129,7 +157,7 @@ export function PostPreview({ platform, text, name, handle, className }: Preview
             <span className="flex-1 text-sm font-semibold">{handle}</span>
             <Ellipsis className="size-4 text-muted" />
           </div>
-          <MediaPlaceholder platform="instagram" />
+          <MediaPlaceholder platform="instagram" url={mediaUrl} />
           <div className="space-y-2 p-3">
             <div className="flex gap-4">
               <Heart className="size-5" />
@@ -155,6 +183,10 @@ export function PostPreview({ platform, text, name, handle, className }: Preview
             </div>
           </div>
           <RichText text={body} className="px-3 pb-3" />
+          {mediaUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mediaUrl} alt="" className="max-h-80 w-full object-cover" />
+          )}
           <div className="grid grid-cols-3 border-t border-line text-xs font-semibold text-muted">
             {[
               [ThumbsUp, 'Like'],
@@ -183,7 +215,7 @@ export function PostPreview({ platform, text, name, handle, className }: Preview
             className,
           )}
         >
-          <MediaPlaceholder platform={platform} tall />
+          <MediaPlaceholder platform={platform} tall url={mediaUrl} />
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-16 text-white">
             <p className="text-sm font-bold">@{handle}</p>
             <p className="mt-1 line-clamp-3 text-xs">{body}</p>

@@ -88,6 +88,17 @@ export class Storage {
     );
   }
 
+  /** Presigned GET against the internal endpoint, for server-side tools like ffprobe. */
+  presignGetInternal(key: string, expiresIn = 3600): Promise<string> {
+    return getSignedUrl(
+      this.internal,
+      new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
+      {
+        expiresIn,
+      },
+    );
+  }
+
   /** Permanent URL of an object under `public/`. */
   publicUrl(key: string): string {
     return `${this.config.publicUrl}/${this.config.bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;

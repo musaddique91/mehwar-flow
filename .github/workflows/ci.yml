@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'musa/**']
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: mehwar
+          POSTGRES_USER: mehwar
+          POSTGRES_PASSWORD: mehwar
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U mehwar -d mehwar" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://mehwar_app:mehwar_app@localhost:5432/mehwar
+      DIRECT_DATABASE_URL: postgresql://mehwar:mehwar@localhost:5432/mehwar
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create the unprivileged runtime role (RLS applies to it)
+        run: |
+          PGPASSWORD=mehwar psql -h localhost -U mehwar -d mehwar -v ON_ERROR_STOP=1 -c \
+            "CREATE ROLE mehwar_app LOGIN PASSWORD 'mehwar_app' NOSUPERUSER NOBYPASSRLS; GRANT CONNECT ON DATABASE mehwar TO mehwar_app; GRANT USAGE ON SCHEMA public TO mehwar_app;"
+      - run: pnpm db:generate
+      - run: pnpm db:migrate
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test

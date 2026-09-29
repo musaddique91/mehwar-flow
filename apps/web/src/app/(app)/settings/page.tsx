@@ -1,15 +1,27 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { KeyRound, Lock, Search, Settings, User } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import {
+  CreditCard,
+  Download,
+  KeyRound,
+  Lock,
+  Search,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  User,
+} from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import type { UserDto } from '@mehwar/shared';
 import { FadeIn } from '@/components/motion';
-import { Avatar, Button, Card, Input, Switch } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { Avatar, Button, Card, Input, Modal, Switch } from '@/components/ui';
+import { api, ApiError, downloadFile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
+import { invalidate, useApi } from '@/lib/hooks';
+import { formatBytes } from '@/lib/media';
 import { PlatformIcon } from '@/lib/platforms';
 
 const TIME_ZONES: string[] =
@@ -67,8 +79,13 @@ function ProfileSection({ user }: { user: UserDto }) {
   const [name, setName] = useState(user.name);
   const [timezone, setTimezone] = useState(user.timezone);
   const [xPremium, setXPremium] = useState(user.xPremium);
+  const [brandVoice, setBrandVoice] = useState(user.brandVoice ?? '');
   const [saving, setSaving] = useState(false);
-  const dirty = name !== user.name || timezone !== user.timezone || xPremium !== user.xPremium;
+  const dirty =
+    name !== user.name ||
+    timezone !== user.timezone ||
+    xPremium !== user.xPremium ||
+    brandVoice !== (user.brandVoice ?? '');
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -76,7 +93,7 @@ function ProfileSection({ user }: { user: UserDto }) {
     try {
       const updated = await api<UserDto>('/me', {
         method: 'PATCH',
-        json: { name, timezone, xPremium },
+        json: { name, timezone, xPremium, brandVoice: brandVoice.trim() || null },
       });
       setUser(updated);
       toast.success('Profile saved');
@@ -118,6 +135,17 @@ function ProfileSection({ user }: { user: UserDto }) {
           </div>
           <Switch checked={xPremium} onChange={setXPremium} label="X Premium" />
         </div>
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-muted">Brand voice (for the AI assistant)</span>
+          <textarea
+            value={brandVoice}
+            onChange={(e) => setBrandVoice(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            placeholder="e.g. Warm and witty, speaks to busy parents, never uses slang, signs off with 💛"
+            className="w-full rounded-2xl border border-line bg-elevated/60 px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[var(--ring)]"
+          />
+        </label>
         <div className="flex justify-end">
           <Button type="submit" loading={saving} disabled={!dirty}>
             Save changes
@@ -206,8 +234,250 @@ function PasswordSection() {
   );
 }
 
+interface BillingOverview {
+  billingEnabled: boolean;
+  plan: string;
+  status: string;
+  currentPeriodEnd: string | null;
+  limits: {
+    label: string;
+    channels: number;
+    scheduledPosts: number;
+    storageBytes: number;
+    aiCreditsPerMonth: number;
+  };
+  usage: {
+    channels: number;
+    scheduledPosts: number;
+    storageBytes: number;
+    aiCreditsPerMonth: number;
+  };
+  plans: {
+    id: 'pro' | 'business';
+    label: string;
+    priceUsd: number;
+    channels: number;
+    scheduledPosts: number;
+    aiCreditsPerMonth: number;
+  }[];
+}
+
+function UsageBar({
+  label,
+  used,
+  limit,
+  format = (n: number) => n.toLocaleString(),
+}: {
+  label: string;
+  used: number;
+  limit: number;
+  format?: (n: number) => string;
+}) {
+  const unlimited = limit >= Number.MAX_SAFE_INTEGER / 2;
+  const ratio = unlimited ? 0 : Math.min(1, used / Math.max(limit, 1));
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs">
+        <span className="font-medium">{label}</span>
+        <span className="tabular-nums text-muted">
+          {format(used)} {unlimited ? '' : `/ ${format(limit)}`}
+        </span>
+      </div>
+      <div className="h-2 rounded-full bg-line">
+        <motion.div
+          className={cn('h-full rounded-full', ratio > 0.9 ? 'bg-red-500' : 'brand-gradient')}
+          initial={{ width: 0 }}
+          animate={{ width: unlimited ? '4%' : `${ratio * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function BillingSection() {
+  const { data } = useApi<BillingOverview>('/billing', ['billing', 'channels', 'posts', 'media']);
+  const [busy, setBusy] = useState<string | null>(null);
+  const go = async (path: string, json?: object) => {
+    setBusy(path);
+    try {
+      const { url } = await api<{ url: string }>(path, { method: 'POST', json });
+      window.location.href = url;
+    } catch (err) {
+      toast.error((err as ApiError).message);
+      setBusy(null);
+    }
+  };
+  const gb = (n: number) => formatBytes(n);
+  if (!data) return null;
+  return (
+    <Card className="space-y-4 bg-card-strong p-6" id="billing">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-500 dark:text-fuchsia-400">
+            <CreditCard className="size-5" />
+          </span>
+          <div>
+            <h2 className="text-lg font-bold">Plan & usage</h2>
+            <p className="text-xs text-muted">
+              {data.limits.label}
+              {data.currentPeriodEnd
+                ? ` · renews ${new Date(data.currentPeriodEnd).toLocaleDateString()}`
+                : ''}
+              {data.status !== 'active' ? ` · ${data.status}` : ''}
+            </p>
+          </div>
+        </div>
+        {data.billingEnabled && data.plan !== 'free' && (
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={busy === '/billing/portal'}
+            onClick={() => go('/billing/portal')}
+          >
+            Manage billing
+          </Button>
+        )}
+      </div>
+      <div className="space-y-3">
+        <UsageBar label="Channels" used={data.usage.channels} limit={data.limits.channels} />
+        <UsageBar
+          label="Scheduled posts"
+          used={data.usage.scheduledPosts}
+          limit={data.limits.scheduledPosts}
+        />
+        <UsageBar
+          label="Media storage"
+          used={data.usage.storageBytes}
+          limit={data.limits.storageBytes}
+          format={gb}
+        />
+        <UsageBar
+          label="AI credits this month"
+          used={data.usage.aiCreditsPerMonth}
+          limit={data.limits.aiCreditsPerMonth}
+        />
+      </div>
+      {data.billingEnabled && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {data.plans.map((p) => (
+            <motion.div
+              key={p.id}
+              whileHover={{ y: -3 }}
+              className={cn(
+                'rounded-2xl border p-4',
+                data.plan === p.id ? 'border-fuchsia-500' : 'border-line',
+              )}
+            >
+              <p className="font-bold">{p.label}</p>
+              <p className="text-2xl font-black">
+                ${p.priceUsd}
+                <span className="text-sm font-medium text-muted">/mo</span>
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {p.channels} channels · {p.scheduledPosts.toLocaleString()} scheduled posts ·{' '}
+                {p.aiCreditsPerMonth.toLocaleString()} AI credits
+              </p>
+              <Button
+                size="sm"
+                className="mt-3 w-full"
+                disabled={data.plan === p.id}
+                loading={busy === `/billing/checkout:${p.id}`}
+                onClick={() => {
+                  setBusy(`/billing/checkout:${p.id}`);
+                  void go('/billing/checkout', { plan: p.id });
+                }}
+              >
+                {data.plan === p.id ? 'Current plan' : `Upgrade to ${p.label}`}
+              </Button>
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function PrivacySection() {
+  const { logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await api('/me', { method: 'DELETE', json: { password } });
+      toast('Your account was deleted. Goodbye 👋');
+      await logout();
+    } catch (err) {
+      toast.error((err as ApiError).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="space-y-4 bg-card-strong p-6">
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-500 dark:text-fuchsia-400">
+          <ShieldCheck className="size-5" />
+        </span>
+        <div>
+          <h2 className="text-lg font-bold">Your data</h2>
+          <p className="text-xs text-muted">
+            Download everything we store about you, or delete your account.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() =>
+            downloadFile('/me/export', 'mehwar-export.json').catch(() =>
+              toast.error('Export failed'),
+            )
+          }
+        >
+          <Download className="size-4" /> Export my data
+        </Button>
+        <Button variant="danger" size="sm" onClick={() => setOpen(true)}>
+          <Trash2 className="size-4" /> Delete account
+        </Button>
+      </div>
+      <Modal open={open} onClose={() => setOpen(false)} title="Delete your account?">
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            This disconnects every channel, cancels scheduled posts and permanently deletes your
+            posts, media and settings. Posts already published stay on the networks.
+          </p>
+          <Input
+            label="Confirm with your password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            icon={<Lock className="size-4" />}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={remove} loading={busy} disabled={!password}>
+              Delete forever
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const { user } = useAuth();
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  useEffect(() => {
+    if (params?.get('checkout') === 'success') {
+      toast.success('Thanks for upgrading! 🎉', { description: 'Your new plan is active.' });
+      invalidate('billing');
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!user) return null;
   return (
     <div className="mx-auto max-w-2xl space-y-6 pt-2">
@@ -221,6 +491,12 @@ export default function SettingsPage() {
       </FadeIn>
       <FadeIn delay={0.16}>
         <PasswordSection />
+      </FadeIn>
+      <FadeIn delay={0.24}>
+        <BillingSection />
+      </FadeIn>
+      <FadeIn delay={0.32}>
+        <PrivacySection />
       </FadeIn>
     </div>
   );

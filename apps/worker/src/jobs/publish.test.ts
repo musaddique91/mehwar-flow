@@ -38,6 +38,7 @@ function memoryStorage() {
     objects,
     publicUrl: (key: string) => `https://media.test/${key}`,
     presignGet: async (key: string) => `https://media.test/${key}?signed`,
+    presignGetInternal: async (key: string) => `http://minio.internal/${key}?signed`,
     head: async (key: string) =>
       objects.has(key) ? { size: objects.get(key)!.body.length } : null,
     getBuffer: async (key: string, range?: { start: number; end: number }) => {

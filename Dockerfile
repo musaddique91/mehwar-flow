@@ -12,9 +12,11 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/worker/package.json apps/worker/
+COPY packages/connectors/package.json packages/connectors/
 COPY packages/crypto/package.json packages/crypto/
 COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
+COPY packages/storage/package.json packages/storage/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 FROM deps AS build
@@ -33,6 +35,9 @@ CMD ["node", "dist/main.js"]
 
 FROM build AS worker
 ENV NODE_ENV=production
+# ffmpeg/ffprobe read video metadata and render poster frames.
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/apps/worker
 USER node
 CMD ["node", "dist/main.js"]

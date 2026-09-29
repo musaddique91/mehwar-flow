@@ -5,6 +5,8 @@ export class ApiError extends Error {
     public readonly status: number,
     message: string,
     public readonly errors?: { path: string; message: string }[],
+    /** Full JSON error body (e.g. `issues` for post validation, `code` for plan limits). */
+    public readonly body: Record<string, any> = {},
   ) {
     super(message);
   }
@@ -24,7 +26,7 @@ async function parse<T>(res: Response): Promise<T> {
     const message = Array.isArray(body.message)
       ? body.message.join(', ')
       : (body.message ?? res.statusText);
-    throw new ApiError(res.status, message, body.errors);
+    throw new ApiError(res.status, message, body.errors, body);
   }
   return body as T;
 }
@@ -43,6 +45,34 @@ export function refreshSession(): Promise<AuthResponse | null> {
       refreshing = null;
     });
   return refreshing;
+}
+
+/** Authorized fetch returning the raw Response (SSE streams, file downloads). */
+export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const doFetch = () =>
+    fetch(`/api${path}`, {
+      ...init,
+      credentials: 'same-origin',
+      headers: {
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...init.headers,
+      },
+    });
+  let res = await doFetch();
+  if (res.status === 401 && accessToken) {
+    if (await refreshSession()) res = await doFetch();
+  }
+  return res;
+}
+
+/** Downloads an authorized endpoint as a file. */
+export async function downloadFile(path: string, fileName: string): Promise<void> {
+  const res = await authFetch(path);
+  if (!res.ok) throw new ApiError(res.status, 'Download failed');
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function api<T>(

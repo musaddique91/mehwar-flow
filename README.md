@@ -5,19 +5,42 @@ Threads, YouTube, TikTok, Snapchat), write once, preview per network, schedule i
 and publish.
 
 - Requirements & corrected platform specs: [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)
+- **Connecting the networks (developer apps, callback URLs, env vars):**
+  [`docs/PLATFORM_SETUP.md`](docs/PLATFORM_SETUP.md)
 - Current scope: personal accounts (one login manages its own channels). Teams/roles come later.
+
+## Features
+
+- **Composer:** write once, choose channels, and fine-tune per network:
+  - custom text per network, thread blocks, YouTube title, privacy and made-for-kids, TikTok
+    privacy and disclosure, Instagram post/reel/story and first comment;
+  - live character rings, validation and previews for every network;
+  - drag-and-drop media upload, emoji picker and an AI writing assistant.
+- **Scheduling:** schedule in your time zone, "next free slot" from your weekly posting slots, post
+  now, drafts, retry failed posts, and CSV bulk import.
+- **Calendar:** month and week views; drag a post to another day to reschedule it.
+- **Publishing engine:**
+  - X, Facebook Pages, Instagram, Threads, YouTube and TikTok (Snapchat behind a flag);
+  - automatic token refresh, retries, and "reconnect" alerts;
+  - live status in the feed.
+- **Media library** (MinIO): thumbnails, JPEG conversion for Instagram, and video metadata via ffmpeg.
+- **Analytics:** nightly stats per post and network, trends, top posts, and CSV export.
+- **Notifications:** in-app bell, live toasts, and email on failures (Mailpit in development).
+- **Plans & billing** (optional Stripe); **GDPR** data export and account deletion; queue dashboard.
 
 ## Stack
 
-| Part              | Tech                                                               |
-| ----------------- | ------------------------------------------------------------------ |
-| `apps/web`        | Next.js 15 + Tailwind (proxies `/api/*` to the API)                |
-| `apps/api`        | NestJS 11: auth, profile, channels, token vault                    |
-| `apps/worker`     | BullMQ worker: token-refresh scan, scheduler sweep                 |
-| `packages/db`     | Prisma schema, migrations, Postgres Row-Level Security             |
-| `packages/crypto` | AES-256-GCM envelope encryption, password hashing                  |
-| `packages/shared` | Per-network rules & validation, time-zone helpers, API schemas     |
-| Infra             | PostgreSQL 16, Redis 7, MinIO (S3), Mailpit, all in Docker Compose |
+| Part                  | Tech                                                                         |
+| --------------------- | ---------------------------------------------------------------------------- |
+| `apps/web`            | Next.js 15 + Tailwind + motion (proxies `/api/*` to the API)                 |
+| `apps/api`            | NestJS 11: auth, channels (OAuth), media, posts, analytics, AI, billing      |
+| `apps/worker`         | BullMQ: publishing, token refresh, media processing, metrics, schedule sweep |
+| `packages/connectors` | One connector per network (OAuth, publish pipelines, metrics)                |
+| `packages/storage`    | MinIO/S3 client (presigned uploads, public copies)                           |
+| `packages/db`         | Prisma schema, migrations, Postgres Row-Level Security, token vault          |
+| `packages/crypto`     | AES-256-GCM envelope encryption, password hashing                            |
+| `packages/shared`     | Per-network rules & validation, time-zone helpers, API schemas               |
+| Infra                 | PostgreSQL 16, Redis 7, MinIO (S3), Mailpit, all in Docker Compose           |
 
 ## Run everything with Docker (recommended)
 
@@ -35,12 +58,16 @@ docker compose ps                  # all services "running"/"healthy"; migrate &
 
 Open:
 
-| URL                          | What                                                                          |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| http://localhost:3000        | Web app: sign up, then the dashboard                                          |
-| http://localhost:4000/health | API health                                                                    |
-| http://localhost:9001        | MinIO console (user `mehwar-admin`, password `MINIO_ROOT_PASSWORD` in `.env`) |
-| http://localhost:8025        | Mailpit (captured dev emails)                                                 |
+| URL                                | What                                                                          |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| http://localhost:3000              | Web app: sign up, then the dashboard                                          |
+| http://localhost:4000/health       | API health                                                                    |
+| http://localhost:9001              | MinIO console (user `mehwar-admin`, password `MINIO_ROOT_PASSWORD` in `.env`) |
+| http://localhost:8025              | Mailpit (captured dev emails)                                                 |
+| http://localhost:4000/admin/queues | Job queues (login `ADMIN_USER` / `ADMIN_PASSWORD` from `.env`)                |
+
+To connect real accounts, create the developer apps and fill in the keys in `.env` as described
+in [`docs/PLATFORM_SETUP.md`](docs/PLATFORM_SETUP.md), then run `docker compose up -d api worker`.
 
 Useful commands:
 
@@ -95,9 +122,12 @@ pnpm test
 
 ## Roadmap
 
-1. **Foundation (done):** monorepo, Docker, DB + RLS, token vault, auth, dashboard shell.
-2. Media library (MinIO uploads, ffmpeg/sharp processing) + composer with per-network previews.
-3. OAuth connectors & publishing: X → Facebook → Instagram → Threads → YouTube → TikTok (Snapchat behind a flag).
-4. Calendar & scheduling UX, notifications.
-5. Analytics, AI assistant (Claude), Stripe billing.
-6. Hardening & platform app reviews. Later: teams/roles/approvals, unified inbox.
+Done: foundation, media library, composer, connectors and publishing, scheduling and calendar,
+notifications, analytics, AI assistant, billing, and GDPR tools.
+
+Next:
+
+- Real-account testing and the platform app reviews (Meta, Google, TikTok, X paid tier).
+- Teams, roles and approvals.
+- A unified inbox (reply to comments and DMs).
+- More networks: LinkedIn, Pinterest, Bluesky.
