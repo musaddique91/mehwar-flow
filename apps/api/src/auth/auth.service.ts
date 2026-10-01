@@ -134,6 +134,16 @@ export class AuthService {
   }
 
   toDto(user: User): UserDto {
+    const hasCustomKey = Boolean(user.aiApiKeyEnc);
+    const hasEnvKey = Boolean(this.config.NVIDIA_API_KEY);
+    const provider = user.aiProvider || 'nvidia';
+    const isEnvDefaultKey = !hasCustomKey && provider === 'nvidia' && hasEnvKey;
+    let maskedKey = user.aiApiKeyPrefix ?? null;
+    if (!maskedKey && isEnvDefaultKey && this.config.NVIDIA_API_KEY) {
+      const k = this.config.NVIDIA_API_KEY;
+      maskedKey = k.length > 8 ? `${k.slice(0, 5)}...${k.slice(-4)}` : '••••••••';
+    }
+
     return {
       id: user.id,
       email: user.email,
@@ -141,6 +151,13 @@ export class AuthService {
       timezone: user.timezone,
       xPremium: user.xPremium,
       brandVoice: user.brandVoice,
+      aiProvider: user.aiProvider ?? 'nvidia',
+      aiBaseUrl: user.aiBaseUrl ?? 'https://integrate.api.nvidia.com/v1',
+      aiModel: user.aiModel ?? this.config.NVIDIA_MODEL ?? 'meta/llama-3.2-11b-vision-instruct',
+      aiDefaultModel: user.aiDefaultModel ?? user.aiModel ?? this.config.NVIDIA_MODEL ?? 'meta/llama-3.2-11b-vision-instruct',
+      aiApiKeyMasked: maskedKey,
+      hasAiApiKey: hasCustomKey || (provider === 'nvidia' && hasEnvKey),
+      isEnvDefaultKey,
       createdAt: user.createdAt.toISOString(),
     };
   }

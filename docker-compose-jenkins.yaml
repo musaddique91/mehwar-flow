@@ -1,0 +1,207 @@
+# Deployed by common-jenkins-pipeline (resources/deployments/mehwar-flow/<env>/pipeline-config.yml).
+# Every ${VAR} comes from the .env the pipeline writes; do not run this file locally (use docker-compose.yml).
+#
+# One image (${APP_IMAGE_TAG}, the Dockerfile's default `app` stage) runs every process.
+# Postgres (`postgres`) and MinIO (`minio`) are the shared containers on mvx_shared_network.
+#
+# Service keys are prefixed on purpose: the deploy step runs `docker rm -f <service key>` before
+# `up`, so a bare key like `api` or `redis` would remove another project's container on the host.
+
+x-app-env: &app-env
+  NODE_ENV: production
+  # Runtime role: not the owner, not a superuser, so Row-Level Security applies to it.
+  DATABASE_URL: postgresql://mehwar_app:${MEHWAR_DB_APP_PASSWORD}@${DB_HOST}:5432/${DB_NAME}
+  REDIS_URL: redis://mehwar-flow-redis:6379
+  S3_ENDPOINT: ${S3_ENDPOINT}
+  S3_PUBLIC_URL: ${S3_PUBLIC_URL}
+  S3_UPLOAD_URL: ${S3_UPLOAD_URL}
+  S3_REGION: ${S3_REGION}
+  S3_BUCKET: ${S3_BUCKET}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+  S3_SECRET_KEY: ${MEHWAR_S3_SECRET_KEY}
+  WEB_ORIGIN: ${WEB_ORIGIN}
+  MASTER_KEYS: ${MEHWAR_MASTER_KEYS}
+  MASTER_KEY_CURRENT_VERSION: ${MASTER_KEY_CURRENT_VERSION}
+  X_CLIENT_ID: ${X_CLIENT_ID}
+  X_CLIENT_SECRET: ${X_CLIENT_SECRET}
+  META_CLIENT_ID: ${META_CLIENT_ID}
+  META_CLIENT_SECRET: ${META_CLIENT_SECRET}
+  THREADS_CLIENT_ID: ${THREADS_CLIENT_ID}
+  THREADS_CLIENT_SECRET: ${THREADS_CLIENT_SECRET}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+  TIKTOK_CLIENT_ID: ${TIKTOK_CLIENT_ID}
+  TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET}
+  LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
+  LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET}
+  LINKEDIN_SCOPES: ${LINKEDIN_SCOPES}
+  SNAPCHAT_CLIENT_ID: ${SNAPCHAT_CLIENT_ID}
+  SNAPCHAT_CLIENT_SECRET: ${SNAPCHAT_CLIENT_SECRET}
+  SNAPCHAT_PUBLISH_URL: ${SNAPCHAT_PUBLISH_URL}
+  FEATURE_SNAPCHAT: ${FEATURE_SNAPCHAT}
+
+services:
+  # Schema migrations as the database owner; api and worker wait for it on every deploy.
+  mehwar-flow-migrate:
+    image: ${APP_IMAGE_TAG}
+    container_name: mehwar-flow-migrate
+    working_dir: /app/packages/db
+    command: ['./node_modules/.bin/prisma', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://mehwar_app:${MEHWAR_DB_APP_PASSWORD}@${DB_HOST}:5432/${DB_NAME}
+      DIRECT_DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${DB_HOST}:5432/${DB_NAME}
+    networks:
+      - mvx_shared_network
+    restart: 'no'
+
+  # Creates the media bucket on the shared MinIO and a key scoped to it. Idempotent.
+  mehwar-flow-minio-init:
+    image: cgr.dev/chainguard/minio-client:latest-dev
+    container_name: mehwar-flow-minio-init
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -eu
+        mc alias set shared http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+        mc mb --ignore-existing "shared/$$S3_BUCKET"
+        # Only public/ is anonymously readable: social platforms pull media from there.
+        mc anonymous set download "shared/$$S3_BUCKET/public"
+        cat > /tmp/policy.json <<POLICY
+        {"Version":"2012-10-17","Statement":[
+          {"Effect":"Allow","Action":["s3:ListBucket","s3:GetBucketLocation","s3:ListBucketMultipartUploads"],"Resource":["arn:aws:s3:::$$S3_BUCKET"]},
+          {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":["arn:aws:s3:::$$S3_BUCKET/*"]}]}
+        POLICY
+        mc admin policy create shared "$$S3_BUCKET-app" /tmp/policy.json
+        mc admin user add shared "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"
+        mc admin policy attach shared "$$S3_BUCKET-app" --user "$$S3_ACCESS_KEY" || true
+        echo "minio ready: bucket $$S3_BUCKET"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${MEHWAR_S3_SECRET_KEY}
+    networks:
+      - mvx_shared_network
+    restart: 'no'
+
+  # BullMQ queues (publishing, scheduled posts, media, token refresh) and live events.
+  mehwar-flow-redis:
+    image: redis:7-alpine
+    container_name: mehwar-flow-redis
+    # AOF so scheduled (delayed) jobs survive restarts; noeviction because BullMQ requires it.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - mehwar-flow-redis-data:/data
+    networks:
+      - mehwar-flow_network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: always
+
+  __BACKEND_CONTAINER_NAME__:
+    image: ${APP_IMAGE_TAG}
+    container_name: ${BACKEND_CONTAINER_NAME}
+    working_dir: /app/apps/api
+    command: ['node', 'dist/main.js']
+    environment:
+      <<: *app-env
+      PORT: 4000
+      JWT_ACCESS_SECRET: ${MEHWAR_JWT_ACCESS_SECRET}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS}
+      AUTH_RATE_LIMIT_PER_MINUTE: ${AUTH_RATE_LIMIT_PER_MINUTE}
+      # The browser reaches the API through the web app's /api proxy.
+      REFRESH_COOKIE_PATH: /api/auth
+      COOKIE_SECURE: ${COOKIE_SECURE}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      AI_MODEL: ${AI_MODEL}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      NVIDIA_MODEL: ${NVIDIA_MODEL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO}
+      STRIPE_PRICE_BUSINESS: ${STRIPE_PRICE_BUSINESS}
+      ADMIN_USER: ${ADMIN_USER}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      mehwar-flow-migrate:
+        condition: service_completed_successfully
+      mehwar-flow-redis:
+        condition: service_healthy
+    networks:
+      mehwar-flow_network:
+        # The web image proxies /api to http://api:4000 (baked in at build time).
+        aliases: [api]
+      mvx_shared_network: {}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  mehwar-flow-worker:
+    image: ${APP_IMAGE_TAG}
+    container_name: mehwar-flow-worker
+    working_dir: /app/apps/worker
+    command: ['node', 'dist/main.js']
+    environment:
+      <<: *app-env
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      FFPROBE_PATH: /usr/bin/ffprobe
+      PUBLISH_CONCURRENCY: ${PUBLISH_CONCURRENCY}
+      TOKEN_REFRESH_INTERVAL_MS: ${TOKEN_REFRESH_INTERVAL_MS}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${MAVERICK_HR_SMTP_USERNAME}
+      SMTP_PASSWORD: ${MAVERICK_HR_SMTP_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+    depends_on:
+      mehwar-flow-migrate:
+        condition: service_completed_successfully
+      mehwar-flow-redis:
+        condition: service_healthy
+    networks:
+      - mehwar-flow_network
+      - mvx_shared_network
+    restart: always
+
+  # Only on the private network, so `api` cannot resolve to another project's container.
+  __FRONTEND_CONTAINER_NAME__:
+    image: ${APP_IMAGE_TAG}
+    container_name: ${FRONTEND_CONTAINER_NAME}
+    working_dir: /app/apps/web/.next/standalone
+    command: ['node', 'apps/web/server.js']
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - ${FRONTEND_PORT}:3000
+    depends_on:
+      __BACKEND_CONTAINER_NAME__:
+        condition: service_healthy
+    networks:
+      - mehwar-flow_network
+    restart: always
+
+volumes:
+  mehwar-flow-redis-data:
+    name: mehwar-flow-redis-data
+
+networks:
+  mehwar-flow_network:
+    driver: bridge
+    name: ${NETWORK_NAME}
+  mvx_shared_network:
+    external: true

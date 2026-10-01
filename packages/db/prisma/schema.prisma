@@ -28,6 +28,13 @@ model User {
   emailVerifiedAt DateTime? @map("email_verified_at")
   /// Brand voice guidance used by the AI assistant.
   brandVoice      String?   @map("brand_voice")
+  /// User-level AI provider: nvidia, openai, anthropic, gemini, groq, openrouter, ollama, custom.
+  aiProvider      String?   @map("ai_provider")
+  aiBaseUrl       String?   @map("ai_base_url")
+  aiModel         String?   @map("ai_model")
+  aiDefaultModel  String?   @map("ai_default_model")
+  aiApiKeyEnc     String?   @map("ai_api_key_enc")
+  aiApiKeyPrefix  String?   @map("ai_api_key_prefix")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -93,6 +100,7 @@ enum Platform {
   youtube
   tiktok
   snapchat
+  linkedin
 }
 
 enum ChannelStatus {

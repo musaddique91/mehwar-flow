@@ -147,10 +147,11 @@ function celebrate() {
 export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
   const { user, loading, login, register } = useAuth();
   const router = useRouter();
+  const isRegister = mode === 'register';
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [password, setPassword] = useState('');
-  const isRegister = mode === 'register';
+  const [email, setEmail] = useState(isRegister ? '' : 'musajs91@gmail.com');
+  const [password, setPassword] = useState(isRegister ? '' : 'Redhat7676');
 
   useEffect(() => {
     if (!loading && user && !busy) router.replace('/dashboard');
@@ -246,6 +247,8 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
                 autoComplete="email"
                 placeholder="you@example.com"
                 icon={<Mail className="size-4" />}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 error={errors.email}
                 required
               />

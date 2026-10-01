@@ -8,9 +8,11 @@ import {
   Eye,
   Heart,
   MessageCircle,
+  RefreshCw,
   Repeat2,
   Send,
   Table2,
+  Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -18,9 +20,9 @@ import { PLATFORM_RULES, type AnalyticsSummaryDto } from '@mehwar/shared';
 import { BarList, LineChart } from '@/components/analytics/charts';
 import { FadeIn, Stagger, StaggerItem } from '@/components/motion';
 import { Button, Card, Skeleton } from '@/components/ui';
-import { downloadFile } from '@/lib/api';
+import { api, downloadFile } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { useApi } from '@/lib/hooks';
+import { invalidate, useApi } from '@/lib/hooks';
 import { PlatformIcon } from '@/lib/platforms';
 
 const RANGES = [7, 30, 90] as const;
@@ -28,25 +30,43 @@ const RANGES = [7, 30, 90] as const;
 export default function AnalyticsPage() {
   const [days, setDays] = useState<(typeof RANGES)[number]>(30);
   const [table, setTable] = useState(false);
-  const { data } = useApi<AnalyticsSummaryDto>(`/analytics/summary?days=${days}`, ['posts']);
+  const [syncing, setSyncing] = useState(false);
+  const { data } = useApi<AnalyticsSummaryDto>(`/analytics/summary?days=${days}`, ['posts', 'analytics']);
   const t = data?.totals;
+
+  const totalAudience = data?.byPlatform?.reduce((sum, p) => sum + (p.followers || 0), 0) ?? 0;
+
   const tiles = [
-    { label: 'Posts published', value: t?.posts, icon: Send },
-    { label: 'Impressions', value: t?.impressions, icon: Eye },
-    { label: 'Likes', value: t?.likes, icon: Heart },
+    { label: 'Total Audience', value: totalAudience, icon: Users },
+    { label: 'Posts & Videos', value: t?.posts, icon: Send },
+    { label: 'Impressions & Views', value: t?.impressions, icon: Eye },
+    { label: 'Likes & Reactions', value: t?.likes, icon: Heart },
     { label: 'Comments', value: t?.comments, icon: MessageCircle },
-    { label: 'Shares', value: t?.shares, icon: Repeat2 },
+    { label: 'Shares & Reposts', value: t?.shares, icon: Repeat2 },
   ];
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      await api(`/analytics/sync?days=${days}`, { method: 'POST' });
+      invalidate('analytics', 'posts');
+      toast.success('Analytics refreshed with live channel data!');
+    } catch {
+      toast.error('Failed to sync analytics');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pt-2">
       <FadeIn className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-black tracking-tight">Analytics</h1>
-          <p className="mt-1 text-sm text-muted">Stats refresh nightly from each network.</p>
+          <p className="mt-1 text-sm text-muted">Audience, reach, and engagement across all your connected networks.</p>
         </div>
-        {/* Filters: one row above the charts. */}
-        <div className="flex items-center gap-2">
+        {/* Filters and action buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="glass flex rounded-full p-1">
             {RANGES.map((r) => (
               <button
@@ -65,6 +85,17 @@ export default function AnalyticsPage() {
               </button>
             ))}
           </div>
+
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={syncing}
+            onClick={handleSync}
+            title="Sync latest stats from your connected channels"
+          >
+            <RefreshCw className={cn('size-4', syncing && 'animate-spin')} /> Sync Live
+          </Button>
+
           <Button
             size="sm"
             variant="secondary"
@@ -80,11 +111,11 @@ export default function AnalyticsPage() {
         </div>
       </FadeIn>
 
-      <Stagger className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <Stagger className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {tiles.map((tile) => (
           <StaggerItem key={tile.label}>
             <Card className="p-4">
-              <tile.icon className="size-4 text-muted" />
+              <tile.icon className="size-4 text-primary" />
               <p className="mt-3 text-2xl font-black tabular-nums">
                 {tile.value === undefined ? '–' : <NumberFlow value={tile.value} />}
               </p>

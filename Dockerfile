@@ -4,7 +4,7 @@
 FROM node:26.3.0-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH NEXT_TELEMETRY_DISABLED=1
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/* \
-  && corepack enable
+  && npm install -g corepack && corepack enable
 WORKDIR /app
 
 FROM base AS deps
@@ -50,3 +50,16 @@ COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/
 USER node
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
+
+# Default target (last stage): one image for api, worker, web and migrations, so a plain
+# `docker build .` (the shared deploy pipeline) yields everything. Each container picks its
+# process via working_dir/command in docker-compose-jenkins.yaml.
+FROM build AS app
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/* \
+  && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static \
+  && chown -R node:node apps/web/.next/standalone
+USER node
+WORKDIR /app/apps/api
+EXPOSE 3000 4000
+CMD ["node", "dist/main.js"]

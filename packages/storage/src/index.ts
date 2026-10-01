@@ -14,6 +14,13 @@ export interface StorageConfig {
   endpoint: string;
   /** Endpoint browsers and social platforms use (e.g. https://media.example.com). */
   publicUrl: string;
+  /**
+   * Endpoint used when generating presigned PUT URLs for direct browser uploads.
+   * Defaults to `endpoint` so that local dev uploads go straight to localhost:9000
+   * instead of through a tunnel that may not relay CORS preflight responses.
+   * Set S3_UPLOAD_URL in production if the upload endpoint differs from the internal one.
+   */
+  uploadUrl: string;
   region: string;
   bucket: string;
   accessKeyId: string;
@@ -25,6 +32,7 @@ export function storageConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Stor
   return {
     endpoint: env.S3_ENDPOINT,
     publicUrl: (env.S3_PUBLIC_URL ?? env.S3_ENDPOINT).replace(/\/$/, ''),
+    uploadUrl: (env.S3_UPLOAD_URL ?? env.S3_ENDPOINT).replace(/\/$/, ''),
     region: env.S3_REGION ?? 'us-east-1',
     bucket: env.S3_BUCKET ?? 'mehwar-media',
     accessKeyId: env.S3_ACCESS_KEY,
@@ -57,8 +65,10 @@ function cryptoRandom(): string {
 
 export class Storage {
   private readonly internal: S3Client;
-  /** Signs URLs against the public endpoint so browsers can use them directly. */
+  /** Signs GET URLs against publicUrl so browsers and CDNs can fetch served media. */
   private readonly signer: S3Client;
+  /** Signs PUT URLs against uploadUrl so browsers upload directly (avoids tunnel CORS issues). */
+  private readonly uploader: S3Client;
 
   constructor(readonly config: StorageConfig) {
     const base = {
@@ -68,11 +78,12 @@ export class Storage {
     };
     this.internal = new S3Client({ ...base, endpoint: config.endpoint });
     this.signer = new S3Client({ ...base, endpoint: config.publicUrl });
+    this.uploader = new S3Client({ ...base, endpoint: config.uploadUrl });
   }
 
   presignPut(key: string, contentType: string, expiresIn = 900): Promise<string> {
     return getSignedUrl(
-      this.signer,
+      this.uploader,
       new PutObjectCommand({ Bucket: this.config.bucket, Key: key, ContentType: contentType }),
       {
         expiresIn,

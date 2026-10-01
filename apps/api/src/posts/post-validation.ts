@@ -12,7 +12,9 @@ export function validatePost(
   const issues: ValidationIssue[] = [];
   const notReady = post.media.filter((m) => m.media.status !== 'READY');
   const media = post.media.map(({ media: m }) => ({
-    kind: (m.mimeType.startsWith('video/') ? 'video' : 'image') as 'image' | 'video',
+    kind: (m.mimeType.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi)$/i.test(m.fileName)
+      ? 'video'
+      : 'image') as 'image' | 'video',
     mimeType: m.mimeType,
     width: m.width ?? undefined,
     height: m.height ?? undefined,

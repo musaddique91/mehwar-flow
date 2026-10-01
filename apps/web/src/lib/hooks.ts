@@ -5,7 +5,7 @@ import type { LiveEvent } from '@mehwar/shared';
 import { api } from './api';
 
 /** Topics that pages can refetch on. Mutations and live events publish them. */
-export type Topic = 'posts' | 'channels' | 'media' | 'notifications' | 'slots' | 'billing';
+export type Topic = 'posts' | 'channels' | 'media' | 'notifications' | 'slots' | 'billing' | 'analytics' | 'comments' | 'ai';
 
 const TOPIC_EVENT = 'mf:refresh';
 const LIVE_EVENT = 'mf:live';

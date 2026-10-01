@@ -137,6 +137,25 @@ Notes:
 Until TikTok audits the app, only **"Only me" (SELF_ONLY)** posts are allowed. Mehwar Flow shows
 this in the composer.
 
+## LinkedIn
+
+1. Go to <https://www.linkedin.com/developers/apps> and click **Create App**.
+2. Enter your App name, link your LinkedIn Company Page, and upload an app logo.
+3. Open the **Products** tab and request access to:
+   - **Share on LinkedIn** (enables publishing member updates via `w_member_social`).
+   - **Sign In with LinkedIn using OpenID Connect** (enables user profile info via `openid`, `profile`, `email`).
+4. Open the **Auth** tab, expand **OAuth 2.0 settings**, and add your Authorized Redirect URL:
+   ```
+   <WEB_ORIGIN>/api/channels/callback/linkedin
+   ```
+   (e.g. `http://localhost:3000/api/channels/callback/linkedin` for local development).
+5. Copy the Client ID and Primary Client Secret into your `.env`:
+   ```env
+   LINKEDIN_CLIENT_ID=...
+   LINKEDIN_CLIENT_SECRET=...
+   ```
+6. Restart the stack (`api` and `worker`). Both personal member profiles and organization company pages (where you have administrator access) will be discovered and connectable.
+
 ## Snapchat (partner access only)
 
 Normal posting to a Snapchat Public Profile needs Snap's partner-only Public Profile API. Snap Kit

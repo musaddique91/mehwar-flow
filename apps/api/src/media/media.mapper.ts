@@ -14,7 +14,10 @@ export async function toMediaDto(m: MediaAsset, storage: Storage | null): Promis
     id: m.id,
     fileName: m.fileName,
     mimeType: m.mimeType,
-    kind: m.mimeType.startsWith('video/') ? 'video' : 'image',
+    kind:
+      m.mimeType.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi)$/i.test(m.fileName)
+        ? 'video'
+        : 'image',
     sizeBytes: Number(m.sizeBytes),
     width: m.width,
     height: m.height,

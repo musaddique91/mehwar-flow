@@ -25,7 +25,7 @@ export interface ConnectedAccount {
 }
 
 export interface MediaRef {
-  kind: 'image' | 'video';
+  kind: 'image' | 'video' | 'thumbnail';
   mimeType: string;
   sizeBytes: number;
   width?: number | null;

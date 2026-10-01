@@ -119,29 +119,113 @@ export class FacebookConnector extends MetaConnector implements PlatformConnecto
     }));
   }
 
+  private async uploadPhotoSource(
+    pageId: string,
+    token: string,
+    img: MediaRef,
+    caption?: string,
+    published = true,
+  ): Promise<any> {
+    const buf = await img.read();
+    const blob = new Blob([buf], { type: img.mimeType || 'image/jpeg' });
+    const form = new FormData();
+    form.append('source', blob, 'photo.jpg');
+    if (caption) form.append('caption', caption);
+    if (!published) form.append('published', 'false');
+    form.append('access_token', token);
+
+    const res: any = await (
+      await this.ctx.fetch(`${GRAPH}/${pageId}/photos`, { method: 'POST', body: form })
+    ).json();
+    if (res.error) {
+      throw new PermanentError(res.error.message || 'Facebook photo upload failed');
+    }
+    return res;
+  }
+
+  private async uploadVideoSource(
+    pageId: string,
+    token: string,
+    video: MediaRef,
+    description?: string,
+  ): Promise<any> {
+    const buf = await video.read();
+    const blob = new Blob([buf], { type: video.mimeType || 'video/mp4' });
+    const form = new FormData();
+    form.append('source', blob, 'video.mp4');
+    if (description) form.append('description', description);
+    form.append('access_token', token);
+
+    const res: any = await (
+      await this.ctx.fetch(`${GRAPH}/${pageId}/videos`, { method: 'POST', body: form })
+    ).json();
+    if (res.error) {
+      throw new PermanentError(res.error.message || 'Facebook video upload failed');
+    }
+    return res;
+  }
+
   async publish(req: PublishRequest): Promise<PublishResult> {
     const pageId = req.account.externalId;
     const images = req.media.filter((m) => m.kind === 'image');
     const video = req.media.find((m) => m.kind === 'video');
+    const isLocal = (url: string) => url.includes('localhost') || url.includes('127.0.0.1');
     let postId: string;
 
     if (video) {
-      const res = await this.graph(`${pageId}/videos`, req.accessToken, {
-        form: { file_url: video.publicUrl, description: req.text },
-      });
-      postId = res.post_id ?? res.id;
+      if (isLocal(video.publicUrl)) {
+        const res = await this.uploadVideoSource(pageId, req.accessToken, video, req.text);
+        postId = res.post_id ?? res.id;
+      } else {
+        try {
+          const res = await this.graph(`${pageId}/videos`, req.accessToken, {
+            form: { file_url: video.publicUrl, description: req.text },
+          });
+          postId = res.post_id ?? res.id;
+        } catch {
+          const res = await this.uploadVideoSource(pageId, req.accessToken, video, req.text);
+          postId = res.post_id ?? res.id;
+        }
+      }
     } else if (images.length === 1) {
-      const res = await this.graph(`${pageId}/photos`, req.accessToken, {
-        form: { url: images[0]!.publicUrl, caption: req.text },
-      });
-      postId = res.post_id ?? res.id;
+      const img = images[0]!;
+      if (isLocal(img.publicUrl)) {
+        const res = await this.uploadPhotoSource(pageId, req.accessToken, img, req.text);
+        postId = res.post_id ?? res.id;
+      } else {
+        try {
+          const res = await this.graph(`${pageId}/photos`, req.accessToken, {
+            form: { url: img.publicUrl, caption: req.text },
+          });
+          postId = res.post_id ?? res.id;
+        } catch {
+          const res = await this.uploadPhotoSource(pageId, req.accessToken, img, req.text);
+          postId = res.post_id ?? res.id;
+        }
+      }
     } else if (images.length > 1) {
       const ids: string[] = [];
       for (const img of images) {
-        const res = await this.graph(`${pageId}/photos`, req.accessToken, {
-          form: { url: img.publicUrl, published: 'false' },
-        });
-        ids.push(res.id);
+        if (isLocal(img.publicUrl)) {
+          const res = await this.uploadPhotoSource(pageId, req.accessToken, img, undefined, false);
+          ids.push(res.id);
+        } else {
+          try {
+            const res = await this.graph(`${pageId}/photos`, req.accessToken, {
+              form: { url: img.publicUrl, published: 'false' },
+            });
+            ids.push(res.id);
+          } catch {
+            const res = await this.uploadPhotoSource(
+              pageId,
+              req.accessToken,
+              img,
+              undefined,
+              false,
+            );
+            ids.push(res.id);
+          }
+        }
       }
       const form: Record<string, string> = { message: req.text };
       ids.forEach((id, i) => (form[`attached_media[${i}]`] = JSON.stringify({ media_fbid: id })));
@@ -184,6 +268,154 @@ export class FacebookConnector extends MetaConnector implements PlatformConnecto
       query: { fields: 'followers_count' },
     });
     return res.followers_count ?? null;
+  }
+
+  async getChannelDetails(pageId: string, accessToken: string) {
+    const pageInfo = await this.graph(pageId, accessToken, {
+      query: { fields: 'id,name,about,picture{url},followers_count,fan_count' },
+    }).catch(() => ({}));
+
+    let posts: Array<{
+      id: string;
+      title: string;
+      description: string;
+      publishedAt: string;
+      thumbnailUrl: string;
+      views: number;
+      likes: number;
+      comments: number;
+      duration: string;
+      isShort: boolean;
+      url: string;
+    }> = [];
+
+    const mapPost = (p: any) => {
+      const msg = p.message || p.story || '';
+      return {
+        id: p.id,
+        title: msg ? (msg.split('\n')[0] || 'Facebook Post').slice(0, 100) : 'Facebook Post',
+        description: msg,
+        publishedAt: p.created_time ?? '',
+        thumbnailUrl: p.full_picture ?? '',
+        views: 0,
+        likes: p.reactions?.summary?.total_count ?? 0,
+        comments: p.comments?.summary?.total_count ?? 0,
+        duration: '',
+        isShort: false,
+        url: p.permalink_url ?? `https://www.facebook.com/${p.id}`,
+      };
+    };
+
+    const endpoints = ['published_posts', 'feed', 'posts'];
+    const fieldOptions = [
+      'id,message,story,created_time,full_picture,permalink_url,shares,reactions.summary(true),comments.summary(true)',
+      'id,message,story,created_time,full_picture,permalink_url,shares',
+      'id,message,story,created_time,full_picture,permalink_url',
+      'id,message,created_time',
+    ];
+
+    for (const endpoint of endpoints) {
+      if (posts.length > 0) break;
+      for (const fields of fieldOptions) {
+        try {
+          const res = await this.graph(`${pageId}/${endpoint}`, accessToken, {
+            query: { fields, limit: '50' },
+          });
+          if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+            posts = res.data.map(mapPost);
+            break;
+          }
+        } catch {
+          // Try next field list
+        }
+      }
+    }
+
+    let weeklyImpressions: number | null = null;
+    let weeklyEngaged: number | null = null;
+    try {
+      const insightsRes = await this.graph(`${pageId}/insights`, accessToken, {
+        query: { metric: 'page_impressions_week,page_engaged_users', period: 'week' },
+      });
+      for (const item of insightsRes.data ?? []) {
+        const val = item.values?.[item.values.length - 1]?.value ?? 0;
+        if (item.name === 'page_impressions_week') weeklyImpressions = val;
+        if (item.name === 'page_engaged_users') weeklyEngaged = val;
+      }
+    } catch {
+      // insights may not be available for all accounts
+    }
+
+    return {
+      channelId: pageInfo.id ?? pageId,
+      title: pageInfo.name ?? 'Facebook Page',
+      description: pageInfo.about ?? 'Connected Facebook Page',
+      customUrl: null,
+      avatarUrl: pageInfo.picture?.data?.url ?? null,
+      bannerUrl: null,
+      subscriberCount: pageInfo.followers_count ?? pageInfo.fan_count ?? null,
+      viewCount: weeklyImpressions,
+      weeklyEngaged,
+      videoCount: posts.length,
+      videos: posts,
+    };
+  }
+
+  async getVideoComments(postId: string, accessToken: string) {
+    try {
+      const res = await this.graph(`${postId}/comments`, accessToken, {
+        query: {
+          fields: 'id,from,message,created_time,comments{id,from,message,created_time}',
+          limit: '50',
+        },
+      });
+      return (res.data ?? []).map((c: any) => ({
+        id: c.id,
+        authorName: c.from?.name ?? 'Facebook User',
+        authorAvatarUrl: null,
+        text: c.message ?? '',
+        publishedAt: c.created_time ?? '',
+        likeCount: 0,
+        replyCount: c.comments?.data?.length ?? 0,
+        replies: (c.comments?.data ?? []).map((r: any) => ({
+          id: r.id,
+          authorName: r.from?.name ?? 'Facebook User',
+          authorAvatarUrl: null,
+          text: r.message ?? '',
+          publishedAt: r.created_time ?? '',
+          likeCount: 0,
+        })),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async replyToComment(
+    params: { videoId: string; parentId?: string; text: string },
+    accessToken: string,
+  ) {
+    const targetId = params.parentId || params.videoId;
+    const res = await this.graph(`${targetId}/comments`, accessToken, {
+      form: { message: params.text },
+    });
+    return {
+      id: res.id,
+      authorName: 'You',
+      authorAvatarUrl: null,
+      text: params.text,
+      publishedAt: new Date().toISOString(),
+      likeCount: 0,
+    };
+  }
+
+  async likePost(postId: string, accessToken: string): Promise<{ liked: boolean }> {
+    await this.graph(`${postId}/likes`, accessToken, { method: 'POST' });
+    return { liked: true };
+  }
+
+  async deleteComment(commentId: string, accessToken: string): Promise<void> {
+    await this.graph(commentId, accessToken, { method: 'DELETE' });
   }
 }
 
@@ -260,6 +492,13 @@ export class InstagramConnector extends MetaConnector implements PlatformConnect
     const igId = req.account.externalId;
     if (req.media.length === 0)
       throw new PermanentError('Instagram posts need at least one image or video');
+
+    // NOTE: Instagram requires publicly reachable URLs (Meta servers pull the media).
+    // In local dev, MinIO at localhost:9000 is NOT reachable by Meta's servers.
+    // For production, ensure S3_PUBLIC_URL points to a public hostname.
+    // We no longer throw here so that local testing can proceed; publishing to Instagram
+    // from localhost will fail at Meta's side with a clear API error.
+
     const type = req.options.igMediaType;
     let containerId: string;
 
@@ -338,5 +577,126 @@ export class InstagramConnector extends MetaConnector implements PlatformConnect
       query: { fields: 'followers_count' },
     });
     return res.followers_count ?? null;
+  }
+
+  async getChannelDetails(igId: string, accessToken: string) {
+    const info = await this.graph(igId, accessToken, {
+      query: { fields: 'id,username,name,profile_picture_url,followers_count,media_count' },
+    }).catch(() => ({}));
+
+    let posts: Array<{
+      id: string;
+      title: string;
+      description: string;
+      publishedAt: string;
+      thumbnailUrl: string;
+      views: number;
+      likes: number;
+      comments: number;
+      duration: string;
+      isShort: boolean;
+      url: string;
+    }> = [];
+
+    try {
+      const mediaRes = await this.graph(`${igId}/media`, accessToken, {
+        query: {
+          fields:
+            'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
+          limit: '50',
+        },
+      });
+
+      posts = (mediaRes.data ?? []).map((m: any) => ({
+        id: m.id,
+        title: m.caption ? (m.caption.split('\n')[0] || 'Instagram Post').slice(0, 100) : 'Instagram Post',
+        description: m.caption ?? '',
+        publishedAt: m.timestamp ?? '',
+        thumbnailUrl: m.media_type === 'VIDEO' ? (m.thumbnail_url || m.media_url || '') : (m.media_url || ''),
+        views: 0,
+        likes: m.like_count ?? 0,
+        comments: m.comments_count ?? 0,
+        duration: '',
+        isShort: m.media_type === 'VIDEO' || m.media_type === 'REELS',
+        url: m.permalink ?? `https://www.instagram.com/p/${m.id}`,
+      }));
+    } catch {
+      // Ignore
+    }
+
+    return {
+      channelId: info.id ?? igId,
+      title: info.name ?? info.username ?? 'Instagram Account',
+      description: 'Connected Instagram Account',
+      customUrl: info.username ? `@${info.username}` : null,
+      avatarUrl: info.profile_picture_url ?? null,
+      bannerUrl: null,
+      subscriberCount: info.followers_count ?? null,
+      viewCount: null,
+      videoCount: info.media_count ?? posts.length,
+      videos: posts,
+    };
+  }
+
+  async getVideoComments(mediaId: string, accessToken: string) {
+    try {
+      const res = await this.graph(`${mediaId}/comments`, accessToken, {
+        query: {
+          fields:
+            'id,username,text,timestamp,like_count,replies{id,username,text,timestamp,like_count}',
+          limit: '50',
+        },
+      });
+      return (res.data ?? []).map((c: any) => ({
+        id: c.id,
+        authorName: c.username ? `@${c.username}` : 'Instagram User',
+        authorAvatarUrl: null,
+        text: c.text ?? '',
+        publishedAt: c.timestamp ?? '',
+        likeCount: c.like_count ?? 0,
+        replyCount: c.replies?.data?.length ?? 0,
+        replies: (c.replies?.data ?? []).map((r: any) => ({
+          id: r.id,
+          authorName: r.username ? `@${r.username}` : 'Instagram User',
+          authorAvatarUrl: null,
+          text: r.text ?? '',
+          publishedAt: r.timestamp ?? '',
+          likeCount: r.like_count ?? 0,
+        })),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async replyToComment(
+    params: { videoId: string; parentId?: string; text: string },
+    accessToken: string,
+  ) {
+    const targetId = params.parentId || params.videoId;
+    const res = await this.graph(`${targetId}/replies`, accessToken, {
+      form: { message: params.text },
+    }).catch(() =>
+      this.graph(`${targetId}/comments`, accessToken, {
+        form: { message: params.text },
+      }),
+    );
+    return {
+      id: res.id,
+      authorName: 'You',
+      authorAvatarUrl: null,
+      text: params.text,
+      publishedAt: new Date().toISOString(),
+      likeCount: 0,
+    };
+  }
+
+  async likePost(_mediaId: string, _accessToken: string): Promise<{ liked: boolean }> {
+    // Instagram does not support liking own posts via API — return graceful no-op
+    return { liked: false };
+  }
+
+  async deleteComment(commentId: string, accessToken: string): Promise<void> {
+    await this.graph(commentId, accessToken, { method: 'DELETE' });
   }
 }

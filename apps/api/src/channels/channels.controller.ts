@@ -36,6 +36,74 @@ export class ChannelsController {
     return this.channels.available();
   }
 
+  @Get('all-comments')
+  getAllComments(
+    @CurrentAuth() auth: AuthContext,
+    @Query('channelId') channelId?: string,
+    @Query('sampleIfEmpty') sampleIfEmpty?: string,
+  ) {
+    return this.channels.getAllComments(
+      auth.organizationId,
+      channelId,
+      sampleIfEmpty === 'true',
+    );
+  }
+
+  @Get(':id/details')
+  getDetails(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.channels.getDetails(auth.organizationId, id);
+  }
+
+  @Get(':id/videos/:videoId/comments')
+  getVideoComments(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('videoId') videoId: string,
+  ) {
+    return this.channels.getVideoComments(auth.organizationId, id, videoId);
+  }
+
+  @Post(':id/videos/:videoId/comments')
+  replyToComment(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('videoId') videoId: string,
+    @Body() body: { text: string; parentId?: string },
+  ) {
+    return this.channels.replyToComment(auth.organizationId, id, videoId, body);
+  }
+
+  @Post(':id/videos/:videoId/like')
+  @HttpCode(200)
+  likePost(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('videoId') videoId: string,
+  ) {
+    return this.channels.likePost(auth.organizationId, id, videoId);
+  }
+
+  @Post(':id/videos/:videoId/retweet')
+  @HttpCode(200)
+  retweetPost(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('videoId') videoId: string,
+  ) {
+    return this.channels.retweetPost(auth.organizationId, id, videoId);
+  }
+
+  @Delete(':id/videos/:videoId/comments/:commentId')
+  @HttpCode(204)
+  async deleteComment(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('videoId') videoId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    await this.channels.deleteComment(auth.organizationId, id, videoId, commentId);
+  }
+
   @Post('connect/:platform')
   async connect(
     @CurrentAuth() auth: AuthContext,

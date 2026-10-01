@@ -3,6 +3,7 @@ import { forTenant } from '@mehwar/db';
 import { eventsChannel, type LiveEvent } from '@mehwar/shared';
 import type IORedis from 'ioredis';
 import nodemailer, { type Transporter } from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 export interface Notifier {
   event(organizationId: string, event: LiveEvent): Promise<void>;
@@ -21,9 +22,9 @@ export class DefaultNotifier implements Notifier {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly redis: IORedis,
-    private readonly opts: { smtpUrl?: string; from: string; webOrigin: string },
+    private readonly opts: { smtp?: string | SMTPTransport.Options; from: string; webOrigin: string },
   ) {
-    this.mailer = opts.smtpUrl ? nodemailer.createTransport(opts.smtpUrl) : null;
+    this.mailer = opts.smtp ? nodemailer.createTransport(opts.smtp) : null;
   }
 
   async event(organizationId: string, event: LiveEvent) {

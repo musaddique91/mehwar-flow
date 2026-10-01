@@ -1,6 +1,7 @@
 import type { Platform } from '@mehwar/shared';
 import { NotConfiguredError } from './errors';
 import { FacebookConnector, InstagramConnector } from './platforms/meta';
+import { LinkedInConnector } from './platforms/linkedin';
 import { SnapchatConnector } from './platforms/snapchat';
 import { ThreadsConnector } from './platforms/threads';
 import { TikTokConnector } from './platforms/tiktok';
@@ -22,6 +23,7 @@ const ENV_PREFIX: Record<Platform, string> = {
   youtube: 'GOOGLE',
   tiktok: 'TIKTOK',
   snapchat: 'SNAPCHAT',
+  linkedin: 'LINKEDIN',
 };
 
 export function clientConfigFromEnv(
@@ -62,6 +64,8 @@ export class ConnectorRegistry {
     if (tiktok) list.push(new TikTokConnector(tiktok, ctx));
     const snap = cfg('snapchat');
     if (snap) list.push(new SnapchatConnector(snap, ctx, env.SNAPCHAT_PUBLISH_URL));
+    const linkedin = cfg('linkedin');
+    if (linkedin) list.push(new LinkedInConnector(linkedin, ctx));
     return new ConnectorRegistry(list);
   }
 

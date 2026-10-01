@@ -1,11 +1,12 @@
 'use client';
 
 import { AnimatePresence, motion, type HTMLMotionProps } from 'motion/react';
-import { forwardRef, useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { forwardRef, useEffect, useId, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Eye, EyeOff, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
 
 const buttonStyles: Record<ButtonVariant, string> = {
   primary:
@@ -13,6 +14,7 @@ const buttonStyles: Record<ButtonVariant, string> = {
   secondary: 'glass text-fg hover:bg-card-strong',
   ghost: 'text-muted hover:bg-line hover:text-fg',
   danger: 'bg-red-500/10 text-red-500 hover:bg-red-500/20',
+  outline: 'border border-line bg-card text-fg hover:bg-line hover:border-line/80 shadow-xs',
 };
 
 export const Button = forwardRef<
@@ -215,17 +217,23 @@ export function Modal({
   onClose,
   title,
   children,
+  maxWidth = 'max-w-md',
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  maxWidth?: string;
 }) {
-  return (
+  // Mount portal target only client-side
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const content = (
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 backdrop-blur-sm sm:items-center"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -235,26 +243,38 @@ export function Modal({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className="glass w-full max-w-md rounded-3xl bg-card-strong p-6"
-            initial={{ y: 60, opacity: 0, scale: 0.96 }}
+            className={cn(
+              'glass w-full rounded-3xl bg-card-strong p-6 shadow-2xl max-h-[88vh] flex flex-col my-auto border border-line',
+              maxWidth,
+            )}
+            initial={{ y: 30, opacity: 0, scale: 0.96 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 60, opacity: 0, scale: 0.96 }}
+            exit={{ y: 30, opacity: 0, scale: 0.96 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold">{title}</h2>
+            <div className="mb-4 flex items-center justify-between shrink-0">
+              <h2 className="text-lg font-bold text-fg truncate pr-4">{title}</h2>
               <button
                 onClick={onClose}
-                className="rounded-full p-1.5 text-muted hover:bg-line hover:text-fg"
+                className="rounded-full p-1.5 text-muted hover:bg-line hover:text-fg shrink-0 transition"
                 aria-label="Close"
               >
                 <X className="size-4" />
               </button>
             </div>
-            {children}
+            <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+              {children}
+            </div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
   );
+
+  if (!mounted) return null;
+  return createPortal(content, document.body);
 }
+
+export * from './testimonials-columns-1';
+export * from './demo';
+

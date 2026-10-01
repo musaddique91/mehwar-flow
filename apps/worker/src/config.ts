@@ -9,6 +9,13 @@ const schema = z.object({
   WEB_ORIGIN: z.string().default('http://localhost:3000'),
   /** e.g. smtp://mailpit:1025 — failure emails are skipped when unset. */
   SMTP_URL: z.string().optional(),
+  /** Alternative to SMTP_URL for credentials that would need URL-escaping (e.g. an email username). */
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  /** Implicit TLS; defaults to true on port 465, otherwise STARTTLS is negotiated. */
+  SMTP_SECURE: z.enum(['true', 'false']).optional(),
   MAIL_FROM: z.string().default('Mehwar Flow <no-reply@mehwar.local>'),
   FFMPEG_PATH: z.string().default('ffmpeg'),
   FFPROBE_PATH: z.string().default('ffprobe'),

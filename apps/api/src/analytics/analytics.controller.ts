@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Query } from '@nestjs/common';
+import { Controller, Get, Header, HttpCode, Post, Query } from '@nestjs/common';
 import type { AuthContext } from '../auth/auth.types';
 import { CurrentAuth } from '../auth/decorators';
 import { AnalyticsService } from './analytics.service';
@@ -12,6 +12,12 @@ export class AnalyticsController {
   @Get('summary')
   summary(@CurrentAuth() auth: AuthContext, @Query('days') range?: string) {
     return this.analytics.summary(auth.organizationId, days(range));
+  }
+
+  @Post('sync')
+  @HttpCode(200)
+  sync(@CurrentAuth() auth: AuthContext, @Query('days') range?: string) {
+    return this.analytics.sync(auth.organizationId, days(range));
   }
 
   @Get('export.csv')

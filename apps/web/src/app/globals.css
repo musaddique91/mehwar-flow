@@ -9,8 +9,10 @@
   --muted: #62647a;
   --card: rgb(255 255 255 / 0.72);
   --card-strong: rgb(255 255 255 / 0.92);
-  --line: rgb(15 16 32 / 0.08);
+  --line: rgb(15 16 32 / 0.14);
   --ring: rgb(168 85 247 / 0.45);
+  --primary: #9333ea;
+  --primary-foreground: #ffffff;
   --blob-a: #c4b5fd;
   --blob-b: #f9a8d4;
   --blob-c: #fdba74;
@@ -27,8 +29,10 @@
   --muted: #9a9bb5;
   --card: rgb(20 20 36 / 0.6);
   --card-strong: rgb(24 24 42 / 0.9);
-  --line: rgb(255 255 255 / 0.08);
+  --line: rgb(255 255 255 / 0.14);
   --ring: rgb(192 132 252 / 0.5);
+  --primary: #c084fc;
+  --primary-foreground: #07070f;
   --blob-a: #6d28d9;
   --blob-b: #be185d;
   --blob-c: #c2410c;
@@ -46,6 +50,9 @@
   --color-card: var(--card);
   --color-card-strong: var(--card-strong);
   --color-line: var(--line);
+  --color-border: var(--line);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }

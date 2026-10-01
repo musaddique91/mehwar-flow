@@ -147,18 +147,64 @@ export class TikTokConnector implements PlatformConnector {
       );
     }
 
-    const init = await this.call('/post/publish/video/init/', req.accessToken, {
-      post_info: {
-        title: req.text.slice(0, 2200),
-        privacy_level: privacy,
-        disable_comment: req.options.disableComment ?? false,
-        disable_duet: req.options.disableDuet ?? false,
-        disable_stitch: req.options.disableStitch ?? false,
-        brand_content_toggle: req.options.brandContent ?? false,
-        brand_organic_toggle: req.options.brandOrganic ?? false,
-      },
-      source_info: { source: 'PULL_FROM_URL', video_url: video.publicUrl },
-    });
+    const isLocal = (url: string) => url.includes('localhost') || url.includes('127.0.0.1');
+
+    let init: { publish_id: string; upload_url?: string };
+    if (isLocal(video.publicUrl)) {
+      // Local dev: TikTok can't pull from localhost → use binary FILE_UPLOAD
+      const buffer = await video.read();
+      const chunkSize = 10 * 1024 * 1024; // 10 MB chunks
+      const totalChunkCount = Math.ceil(buffer.byteLength / chunkSize);
+      init = await this.call('/post/publish/video/init/', req.accessToken, {
+        post_info: {
+          title: req.text.slice(0, 2200),
+          privacy_level: privacy,
+          disable_comment: req.options.disableComment ?? false,
+          disable_duet: req.options.disableDuet ?? false,
+          disable_stitch: req.options.disableStitch ?? false,
+          brand_content_toggle: req.options.brandContent ?? false,
+          brand_organic_toggle: req.options.brandOrganic ?? false,
+        },
+        source_info: {
+          source: 'FILE_UPLOAD',
+          video_size: buffer.byteLength,
+          chunk_size: chunkSize,
+          total_chunk_count: totalChunkCount,
+        },
+      });
+      // Upload chunks to the upload_url returned by TikTok
+      const uploadUrl = init.upload_url;
+      if (uploadUrl) {
+        for (let i = 0; i < totalChunkCount; i++) {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, buffer.byteLength);
+          const chunk = buffer.subarray(start, end);
+          await this.ctx.fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'video/mp4',
+              'Content-Range': `bytes ${start}-${end - 1}/${buffer.byteLength}`,
+            },
+            body: chunk,
+          });
+        }
+      }
+    } else {
+      // Production: MinIO public URL is reachable — let TikTok pull it
+      init = await this.call('/post/publish/video/init/', req.accessToken, {
+        post_info: {
+          title: req.text.slice(0, 2200),
+          privacy_level: privacy,
+          disable_comment: req.options.disableComment ?? false,
+          disable_duet: req.options.disableDuet ?? false,
+          disable_stitch: req.options.disableStitch ?? false,
+          brand_content_toggle: req.options.brandContent ?? false,
+          brand_organic_toggle: req.options.brandOrganic ?? false,
+        },
+        source_info: { source: 'PULL_FROM_URL', video_url: video.publicUrl },
+      });
+    }
+
     const publishId: string = init.publish_id;
 
     const status = await poll(

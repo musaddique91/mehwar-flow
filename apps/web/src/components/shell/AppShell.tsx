@@ -8,6 +8,7 @@ import {
   House,
   Images,
   LogOut,
+  MessageSquare,
   Plug,
   Settings,
   SquarePen,
@@ -38,6 +39,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: House },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/channels', label: 'Channels', icon: Plug },
+  { href: '/comments', label: 'Comments', icon: MessageSquare },
   { href: '/media', label: 'Media', icon: Images },
   { href: '/analytics', label: 'Analytics', icon: ChartNoAxesColumn },
   { href: '/settings', label: 'Settings', icon: Settings },
@@ -286,8 +288,8 @@ function Topbar() {
         <Logo href="/dashboard" />
       </div>
       <div className="hidden md:block">
-        <p className="text-sm text-muted">{greeting},</p>
-        <p className="text-xl font-bold tracking-tight">{user?.name.split(' ')[0] ?? 'there'} 👋</p>
+        <p className="text-sm text-muted" suppressHydrationWarning>{greeting},</p>
+        <p className="text-xl font-bold tracking-tight" suppressHydrationWarning>{user?.name.split(' ')[0] ?? 'there'} 👋</p>
       </div>
       <div className="flex items-center gap-2">
         <NotificationsBell />

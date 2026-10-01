@@ -37,7 +37,14 @@ async function main() {
     connectors: ConnectorRegistry.fromEnv(),
     redis: connection,
     notifier: new DefaultNotifier(prisma, connection, {
-      smtpUrl: config.SMTP_URL,
+      smtp: config.SMTP_HOST
+        ? {
+            host: config.SMTP_HOST,
+            port: config.SMTP_PORT,
+            secure: config.SMTP_SECURE ? config.SMTP_SECURE === 'true' : config.SMTP_PORT === 465,
+            auth: config.SMTP_USER ? { user: config.SMTP_USER, pass: config.SMTP_PASSWORD } : undefined,
+          }
+        : config.SMTP_URL,
       from: config.MAIL_FROM,
       webOrigin: config.WEB_ORIGIN,
     }),

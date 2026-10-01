@@ -9,3 +9,4 @@ export { ThreadsConnector } from './platforms/threads';
 export { YouTubeConnector } from './platforms/youtube';
 export { TikTokConnector } from './platforms/tiktok';
 export { SnapchatConnector } from './platforms/snapchat';
+export { LinkedInConnector } from './platforms/linkedin';

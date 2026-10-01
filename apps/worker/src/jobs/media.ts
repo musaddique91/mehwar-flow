@@ -94,7 +94,9 @@ export async function processMedia(
   if (!media || media.status === 'READY') return;
 
   try {
-    if (media.mimeType.startsWith('image/')) {
+    const isVideo =
+      media.mimeType.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi)$/i.test(media.fileName);
+    if (!isVideo && (media.mimeType.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(media.fileName))) {
       const original = await storage.getBuffer(media.storageKey);
       const image = sharp(original, { failOn: 'error', animated: false }).rotate();
       const meta = await image.metadata();
@@ -123,7 +125,7 @@ export async function processMedia(
           processingError: null,
         },
       });
-    } else if (media.mimeType.startsWith('video/')) {
+    } else if (isVideo) {
       // Internal endpoint: the public URL (e.g. localhost:9000) isn't reachable from this container.
       const url = await storage.presignGetInternal(media.storageKey, 3600);
       const probe = await probeVideo(tools, url);

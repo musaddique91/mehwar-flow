@@ -7,7 +7,7 @@
 name: mehwar-flow
 
 x-app-env: &app-env
-  DATABASE_URL: postgresql://mehwar_app:${POSTGRES_APP_PASSWORD:?run scripts/generate-env.sh}@postgres:5432/mehwar
+  DATABASE_URL: postgresql://mehwar_app:${POSTGRES_APP_PASSWORD:-root}@host.docker.internal:5432/mehwar
   REDIS_URL: redis://redis:6379
   S3_ENDPOINT: http://minio:9000
   S3_PUBLIC_URL: ${S3_PUBLIC_URL:-http://localhost:9000}
@@ -50,7 +50,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
     ports:
-      - '127.0.0.1:5432:5432'
+      - '127.0.0.1:5433:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U mehwar -d mehwar']
       interval: 5s
@@ -65,7 +65,7 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - '127.0.0.1:6379:6379'
+      - '127.0.0.1:6380:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -74,7 +74,7 @@ services:
 
   minio:
     # Override with MINIO_IMAGE (e.g. a pinned RELEASE tag) if needed.
-    image: ${MINIO_IMAGE:-minio/minio:latest}
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio:latest}
     restart: unless-stopped
     command: ['server', '/data', '--console-address', ':9001']
     environment:
@@ -87,7 +87,7 @@ services:
       - '127.0.0.1:9001:9001'
 
   minio-init:
-    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
+    image: ${MINIO_MC_IMAGE:-cgr.dev/chainguard/minio-client:latest-dev}
     depends_on:
       - minio
     entrypoint: ['/bin/sh', '/init.sh']
@@ -113,12 +113,11 @@ services:
       context: .
       target: build
     command: ['pnpm', '--filter', '@mehwar/db', 'migrate:deploy']
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     environment:
-      DATABASE_URL: postgresql://mehwar_app:${POSTGRES_APP_PASSWORD}@postgres:5432/mehwar
-      DIRECT_DATABASE_URL: postgresql://mehwar:${POSTGRES_PASSWORD}@postgres:5432/mehwar
-    depends_on:
-      postgres:
-        condition: service_healthy
+      DATABASE_URL: postgresql://mehwar_app:${POSTGRES_APP_PASSWORD:-root}@host.docker.internal:5432/mehwar
+      DIRECT_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-root}@host.docker.internal:5432/mehwar
     restart: 'no'
 
   api:
@@ -126,6 +125,8 @@ services:
       context: .
       target: api
     restart: unless-stopped
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     environment:
       <<: *app-env
       PORT: 4000
@@ -168,6 +169,8 @@ services:
       context: .
       target: worker
     restart: unless-stopped
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     environment:
       <<: *app-env
       FFMPEG_PATH: /usr/bin/ffmpeg
@@ -185,8 +188,10 @@ services:
       args:
         API_INTERNAL_URL: http://api:4000
     restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4000}
     ports:
-      - '3000:3000'
+      - '${WEB_PORT:-3001}:3000'
     depends_on:
       api:
         condition: service_healthy

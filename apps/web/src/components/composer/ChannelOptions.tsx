@@ -1,8 +1,8 @@
 'use client';
 
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, ImagePlus, Loader2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import {
   countCharacters,
   maxTextLength,
@@ -11,11 +11,13 @@ import {
   TIKTOK_PRIVACY,
   YOUTUBE_PRIVACY,
   type ChannelDto,
+  type MediaDto,
   type TargetOptions,
 } from '@mehwar/shared';
 import { Switch } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { PlatformIcon } from '@/lib/platforms';
+import { uploadMedia } from '@/lib/media';
 
 export interface TargetDraft {
   textOverride: string | null;
@@ -82,6 +84,9 @@ export function ChannelOptions({
     (channel.platform === 'youtube' && draft.options.madeForKids === undefined) ||
     (channel.platform === 'tiktok' && !draft.options.privacy);
   const [open, setOpen] = useState(needsInput);
+  const [thumbnail, setThumbnail] = useState<MediaDto | null>(null);
+  const [thumbUploading, setThumbUploading] = useState(false);
+  const thumbRef = useRef<HTMLInputElement>(null);
   const set = (options: Partial<TargetOptions>) =>
     onChange({ ...draft, options: { ...draft.options, ...options } });
   const text = draft.textOverride ?? baseText;
@@ -221,6 +226,65 @@ export function ChannelOptions({
                       options={['yes', 'no'] as const}
                       labels={{ yes: "Yes, it's made for kids", no: 'No' }}
                       onChange={(v) => set({ madeForKids: v === 'yes' })}
+                    />
+                  </div>
+                  {/* Custom Thumbnail */}
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted">Custom thumbnail (optional)</span>
+                    {thumbnail ? (
+                      <div className="relative w-full overflow-hidden rounded-xl border border-line">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={thumbnail.thumbnailUrl ?? thumbnail.url ?? undefined}
+                          alt="Thumbnail"
+                          className="aspect-video w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setThumbnail(null);
+                            set({ thumbnailMediaId: undefined });
+                          }}
+                          className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur hover:bg-black/80"
+                          aria-label="Remove thumbnail"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={thumbUploading}
+                        onClick={() => thumbRef.current?.click()}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line py-3 text-xs font-medium text-muted transition hover:border-fg/40 hover:text-fg disabled:opacity-50"
+                      >
+                        {thumbUploading ? (
+                          <><Loader2 className="size-4 animate-spin" /> Uploading…</>
+                        ) : (
+                          <><ImagePlus className="size-4" /> Upload thumbnail image</>  
+                        )}
+                      </button>
+                    )}
+                    <input
+                      ref={thumbRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setThumbUploading(true);
+                        try {
+                          const done = await uploadMedia(file, () => {});
+                          setThumbnail(done);
+                          set({ thumbnailMediaId: done.id });
+                        } catch {
+                          // toast is shown by uploadMedia
+                        } finally {
+                          setThumbUploading(false);
+                          e.target.value = '';
+                        }
+                      }}
                     />
                   </div>
                 </>

@@ -11,6 +11,8 @@ export const targetOptionsSchema = z
     privacy: z.enum([...YOUTUBE_PRIVACY, ...TIKTOK_PRIVACY]).optional(),
     madeForKids: z.boolean().optional(),
     tags: z.array(z.string().max(100)).max(30).optional(),
+    /** YouTube: media library asset ID to use as custom thumbnail after publishing. */
+    thumbnailMediaId: z.string().uuid().optional(),
     /** TikTok */
     disableComment: z.boolean().optional(),
     disableDuet: z.boolean().optional(),
@@ -38,6 +40,15 @@ export const postInputSchema = z.object({
   targets: z.array(targetInputSchema).max(50).default([]),
 });
 export type PostInput = z.infer<typeof postInputSchema>;
+
+/** Body for cross-posting a published post to additional channels. */
+export const crossPostSchema = z.object({
+  /** New channel IDs to publish to (must not already be targeted by this post). */
+  channelIds: z.array(z.string().uuid()).min(1).max(50),
+  /** Optional text override applied to all new targets. */
+  textOverride: z.string().max(63_206).nullish(),
+});
+export type CrossPostInput = z.infer<typeof crossPostSchema>;
 
 export const scheduleSchema = z.object({
   /** Wall-clock time in `timezone`, "YYYY-MM-DDTHH:mm". */
@@ -162,4 +173,40 @@ export interface AnalyticsSummaryDto {
     url: string | null;
     engagement: number;
   }[];
+}
+
+export interface VideoSuggestionDto {
+  id: string;
+  title: string;
+  hook: string;
+  reason: string;
+  fanRequests: string[];
+  suggestedFormat: 'Tutorial' | 'Deep Dive' | 'Shorts / Quick Tip' | 'Q&A / FAQ' | 'Troubleshooting Guide' | 'Comparison';
+  demandLevel: 'High' | 'Medium' | 'Trending';
+  outline: string[];
+}
+
+export interface CommentAnalysisResultDto {
+  summary: string;
+  dominantEmotion: string;
+  counts: {
+    happy: number;
+    excited: number;
+    angry: number;
+    sad: number;
+    question: number;
+    neutral: number;
+    total: number;
+  };
+  comments: Array<{
+    id: string;
+    authorName: string;
+    text: string;
+    publishedAt?: string;
+    emotion: string;
+    emoji: string;
+    reason?: string;
+  }>;
+  videoSuggestions: VideoSuggestionDto[];
+  modelUsed: string;
 }

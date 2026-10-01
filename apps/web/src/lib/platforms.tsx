@@ -1,4 +1,6 @@
+import type React from 'react';
 import type { IconType } from 'react-icons';
+import { FaLinkedinIn } from 'react-icons/fa6';
 import {
   SiFacebook,
   SiInstagram,
@@ -50,9 +52,22 @@ export const PLATFORM_BRAND: Record<Platform, PlatformBrand> = {
     color: '#fffc00',
     gradient: 'linear-gradient(135deg,#fffc00,#facc15)',
   },
+  linkedin: {
+    icon: FaLinkedinIn,
+    color: '#0a66c2',
+    gradient: 'linear-gradient(135deg,#0077b5,#0a66c2)',
+  },
 };
 
-export function PlatformIcon({ platform, className }: { platform: Platform; className?: string }) {
+export function PlatformIcon({
+  platform,
+  className,
+  style,
+}: {
+  platform: Platform;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   const Icon = PLATFORM_BRAND[platform].icon;
-  return <Icon className={className} aria-hidden />;
+  return <Icon className={className} style={style} aria-hidden />;
 }

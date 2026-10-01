@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AuthError, PermanentError, RetryableError } from './errors';
 import { FacebookConnector, InstagramConnector } from './platforms/meta';
+import { LinkedInConnector } from './platforms/linkedin';
 import { SnapchatConnector } from './platforms/snapchat';
 import { ThreadsConnector } from './platforms/threads';
 import { TikTokConnector } from './platforms/tiktok';
@@ -479,6 +480,88 @@ describe('Snapchat', () => {
   });
 });
 
+describe('LinkedIn', () => {
+  it('generates proper OAuth authorization URL with required scopes', () => {
+    const li = new LinkedInConnector(client);
+    const url = li.getAuthUrl({ state: 'random-state', redirectUri: 'https://example.com/callback' });
+    expect(url).toContain('https://www.linkedin.com/oauth/v2/authorization');
+    expect(url).toContain('response_type=code');
+    expect(url).toContain('client_id=id');
+    expect(url).toContain('redirect_uri=https%3A%2F%2Fexample.com%2Fcallback');
+    expect(url).toContain('state=random-state');
+    expect(url).toContain('openid+profile+email+w_member_social');
+  });
+
+  it('exchanges authorization code for token set', async () => {
+    const { ctx } = fakeContext({
+      'POST https://www.linkedin.com/oauth/v2/accessToken': () => ({
+        json: {
+          access_token: 'li-token-123',
+          expires_in: 5184000,
+          refresh_token: 'li-refresh-456',
+          refresh_token_expires_in: 31536000,
+          scope: 'openid profile email w_member_social',
+        },
+      }),
+    });
+    const li = new LinkedInConnector(client, ctx);
+    const tokens = await li.exchangeCode('test-auth-code', 'https://example.com/callback');
+    expect(tokens.accessToken).toBe('li-token-123');
+    expect(tokens.refreshToken).toBe('li-refresh-456');
+    expect(tokens.scopes).toContain('w_member_social');
+  });
+
+  it('lists accounts from OpenID userinfo and maps person URN', async () => {
+    const { ctx } = fakeContext({
+      'GET https://api.linkedin.com/v2/userinfo': () => ({
+        json: {
+          sub: 'person-sub-789',
+          name: 'Jane Doe',
+          email: 'jane@example.com',
+          picture: 'https://media.licdn.com/dms/image/avatar.jpg',
+        },
+      }),
+      'GET https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&state=APPROVED': () => ({
+        json: { elements: [] },
+      }),
+    });
+    const li = new LinkedInConnector(client, ctx);
+    const accounts = await li.listAccounts({ accessToken: 'li-token', scopes: [] });
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].externalId).toBe('urn:li:person:person-sub-789');
+    expect(accounts[0].displayName).toBe('Jane Doe');
+    expect(accounts[0].username).toBe('jane');
+    expect(accounts[0].avatarUrl).toBe('https://media.licdn.com/dms/image/avatar.jpg');
+  });
+
+  it('publishes text post to UGC Posts API', async () => {
+    let capturedBody: any;
+    const { ctx } = fakeContext({
+      'POST https://api.linkedin.com/v2/ugcPosts': (call) => {
+        capturedBody = call.body;
+        return {
+          json: { id: 'urn:li:ugcPost:1234567890' },
+        };
+      },
+    });
+    const li = new LinkedInConnector(client, ctx);
+    const res = await li.publish(
+      baseReq({
+        text: 'Excited to announce our new platform launch! 🚀',
+        account: { externalId: 'urn:li:person:person-sub-789', metadata: {} },
+      }),
+    );
+    expect(res.externalId).toBe('urn:li:ugcPost:1234567890');
+    expect(res.url).toBe(
+      `https://www.linkedin.com/feed/update/${encodeURIComponent('urn:li:ugcPost:1234567890')}`,
+    );
+    expect(capturedBody.author).toBe('urn:li:person:person-sub-789');
+    expect(capturedBody.specificContent['com.linkedin.ugc.ShareContent'].shareCommentary.text).toBe(
+      'Excited to announce our new platform launch! 🚀',
+    );
+  });
+});
+
 describe('ConnectorRegistry', () => {
   it('only enables platforms with credentials; Snapchat also needs the feature flag', () => {
     const env = {
@@ -488,15 +571,19 @@ describe('ConnectorRegistry', () => {
       META_CLIENT_SECRET: 'd',
       SNAPCHAT_CLIENT_ID: 'e',
       SNAPCHAT_CLIENT_SECRET: 'f',
+      LINKEDIN_CLIENT_ID: 'g',
+      LINKEDIN_CLIENT_SECRET: 'h',
     };
     expect(ConnectorRegistry.fromEnv(env).available().sort()).toEqual([
       'facebook',
       'instagram',
+      'linkedin',
       'x',
     ]);
     expect(ConnectorRegistry.fromEnv({ ...env, FEATURE_SNAPCHAT: 'true' }).has('snapchat')).toBe(
       true,
     );
+    expect(ConnectorRegistry.fromEnv(env).has('linkedin')).toBe(true);
     expect(() => ConnectorRegistry.fromEnv({}).get('tiktok')).toThrow(/not configured/);
   });
 });

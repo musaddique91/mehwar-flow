@@ -11,6 +11,7 @@ export const PLATFORMS = [
   'youtube',
   'tiktok',
   'snapchat',
+  'linkedin',
 ] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
@@ -146,6 +147,20 @@ export const PLATFORM_RULES: Record<Platform, PlatformRules> = {
     supportsThreads: false,
     imageMimeTypes: ['image/jpeg', 'image/png'],
     videoMimeTypes: ['video/mp4', 'video/quicktime'],
+  },
+  linkedin: {
+    label: 'LinkedIn',
+    maxTextLength: 3_000,
+    allowsTextOnly: true,
+    requiresVideo: false,
+    maxImages: 9,
+    maxVideos: 1,
+    allowsMixedMedia: false,
+    maxVideoDurationSec: 600,
+    linksNotClickable: false,
+    supportsThreads: false,
+    imageMimeTypes: COMMON_IMAGES,
+    videoMimeTypes: COMMON_VIDEOS,
   },
 };
 

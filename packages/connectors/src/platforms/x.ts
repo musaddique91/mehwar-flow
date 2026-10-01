@@ -216,4 +216,163 @@ export class XConnector implements PlatformConnector {
       },
     });
   }
+
+  /**
+   * Returns profile info + recent tweets (last 10) shaped to match
+   * the channel details contract the API service expects.
+   */
+  async getChannelDetails(accessToken: string) {
+    // Fetch authenticated user with follower count
+    const meRes = await request(this.ctx, `${API}/users/me`, {
+      bearer: accessToken,
+      query: {
+        'user.fields': 'profile_image_url,public_metrics,description,username',
+      },
+    });
+    const me = meRes.data;
+
+    // Fetch recent tweets (up to 10)
+    let videos: any[] = [];
+    try {
+      const tweetsRes = await request(this.ctx, `${API}/users/${me.id}/tweets`, {
+        bearer: accessToken,
+        query: {
+          max_results: '10',
+          'tweet.fields': 'created_at,public_metrics,entities,attachments',
+          'media.fields': 'url,preview_image_url,type',
+          expansions: 'attachments.media_keys',
+        },
+      });
+
+      const mediaMap: Record<string, any> = {};
+      for (const m of tweetsRes.includes?.media ?? []) {
+        mediaMap[m.media_key] = m;
+      }
+
+      videos = (tweetsRes.data ?? []).map((t: any) => {
+        const metrics = t.public_metrics ?? {};
+        const mediaKey = t.attachments?.media_keys?.[0];
+        const media = mediaKey ? mediaMap[mediaKey] : null;
+        const thumbUrl = media?.url ?? media?.preview_image_url ?? null;
+
+        return {
+          id: t.id,
+          title: t.text?.slice(0, 120) || '(tweet)',
+          description: t.text ?? '',
+          thumbnailUrl: thumbUrl,
+          publishedAt: t.created_at ?? null,
+          url: `https://x.com/i/web/status/${t.id}`,
+          views: metrics.impression_count ?? 0,
+          likes: metrics.like_count ?? 0,
+          comments: metrics.reply_count ?? 0,
+          shares: (metrics.retweet_count ?? 0) + (metrics.quote_count ?? 0),
+          isShort: false,
+          duration: null,
+        };
+      });
+    } catch (err) {
+      console.warn(`X: could not fetch tweets: ${(err as Error).message}`);
+    }
+
+    const pub = me.public_metrics ?? {};
+    return {
+      channelId: me.id,
+      title: me.name,
+      description: me.description ?? '',
+      customUrl: `@${me.username}`,
+      avatarUrl: me.profile_image_url ?? null,
+      bannerUrl: null,
+      subscriberCount: pub.followers_count ?? 0,
+      viewCount: pub.tweet_count ?? 0,   // total tweets as "total reach" proxy
+      videoCount: videos.length,
+      videos,
+    };
+  }
+
+  /**
+   * Fetches the conversation / replies for a given tweet id.
+   */
+  async getVideoComments(tweetId: string, accessToken: string) {
+    try {
+      // Search recent tweets that reply to this tweet
+      const res = await request(this.ctx, `${API}/tweets/search/recent`, {
+        bearer: accessToken,
+        query: {
+          query: `conversation_id:${tweetId}`,
+          max_results: '20',
+          'tweet.fields': 'created_at,public_metrics,author_id',
+          'user.fields': 'name,profile_image_url,username',
+          expansions: 'author_id',
+        },
+      });
+
+      const userMap: Record<string, any> = {};
+      for (const u of res.includes?.users ?? []) {
+        userMap[u.id] = u;
+      }
+
+      return (res.data ?? []).map((t: any) => {
+        const author = userMap[t.author_id] ?? {};
+        return {
+          id: t.id,
+          text: t.text ?? '',
+          authorName: author.name ?? author.username ?? 'Unknown',
+          authorAvatarUrl: author.profile_image_url ?? null,
+          likeCount: t.public_metrics?.like_count ?? 0,
+          publishedAt: t.created_at ?? null,
+          replies: [],
+        };
+      });
+    } catch (err) {
+      console.warn(`X: could not fetch replies: ${(err as Error).message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Posts a reply tweet to a given tweet (parentId = tweet being replied to).
+   */
+  async replyToComment(
+    { videoId: _videoId, parentId, text }: { videoId: string; parentId?: string; text: string },
+    accessToken: string,
+  ) {
+    const replyToId = parentId ?? _videoId;
+    const res = await request(this.ctx, `${API}/tweets`, {
+      bearer: accessToken,
+      json: {
+        text,
+        reply: { in_reply_to_tweet_id: replyToId },
+      },
+    });
+    return { id: res.data.id as string };
+  }
+
+  async likePost(tweetId: string, accessToken: string): Promise<{ liked: boolean }> {
+    // First get the authenticated user's id
+    const meRes = await request(this.ctx, `${API}/users/me`, { bearer: accessToken });
+    const userId = meRes.data?.id as string;
+    await request(this.ctx, `${API}/users/${userId}/likes`, {
+      bearer: accessToken,
+      json: { tweet_id: tweetId },
+    });
+    return { liked: true };
+  }
+
+  async retweetPost(tweetId: string, accessToken: string): Promise<{ retweeted: boolean }> {
+    const meRes = await request(this.ctx, `${API}/users/me`, { bearer: accessToken });
+    const userId = meRes.data?.id as string;
+    await request(this.ctx, `${API}/users/${userId}/retweets`, {
+      bearer: accessToken,
+      json: { tweet_id: tweetId },
+    });
+    return { retweeted: true };
+  }
+
+  async deleteComment(_commentId: string, _accessToken: string): Promise<void> {
+    // X API: DELETE /2/tweets/:id — only own tweets
+    await request(this.ctx, `${API}/tweets/${_commentId}`, {
+      bearer: _accessToken,
+      method: 'DELETE',
+    });
+  }
 }

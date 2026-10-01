@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { AuthResponse, LoginInput, UserDto } from '@mehwar/shared';
-import { api, refreshSession, setAccessToken } from './api';
+import { api, getAccessToken, refreshSession, setAccessToken } from './api';
 
 interface AuthState {
   user: UserDto | null;
@@ -34,7 +34,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshSession()
-      .then((session) => setUser(session?.user ?? null))
+      .then(async (session) => {
+        if (session?.user) {
+          setUser(session.user);
+        } else if (getAccessToken()) {
+          try {
+            const me = await api<UserDto>('/auth/me');
+            setUser(me);
+          } catch {
+            setUser(null);
+            setAccessToken(null);
+          }
+        } else {
+          setUser(null);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 

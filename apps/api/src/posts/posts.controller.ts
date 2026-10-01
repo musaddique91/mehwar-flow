@@ -12,9 +12,11 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import {
+  crossPostSchema,
   postInputSchema,
   scheduleSchema,
   slotSchema,
+  type CrossPostInput,
   type PostInput,
   type ScheduleInput,
 } from '@mehwar/shared';
@@ -108,6 +110,20 @@ export class PostsController {
   @Post('posts/:id/retry')
   retry(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.posts.retry(auth.organizationId, id);
+  }
+
+  @Post('posts/:id/cross-post')
+  async crossPost(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(crossPostSchema)) body: CrossPostInput,
+  ) {
+    return this.posts.crossPost(
+      auth.organizationId,
+      id,
+      body.channelIds,
+      body.textOverride ?? null,
+    );
   }
 
   @Post('posts/import')

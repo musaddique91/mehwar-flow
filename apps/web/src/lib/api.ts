@@ -12,11 +12,23 @@ export class ApiError extends Error {
   }
 }
 
-let accessToken: string | null = null;
+let accessToken: string | null =
+  typeof window !== 'undefined' ? localStorage.getItem('mehwar_token') : null;
 let refreshing: Promise<AuthResponse | null> | null = null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
+  if (typeof window !== 'undefined') {
+    if (token) {
+      localStorage.setItem('mehwar_token', token);
+    } else {
+      localStorage.removeItem('mehwar_token');
+    }
+  }
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
 }
 
 async function parse<T>(res: Response): Promise<T> {
@@ -37,7 +49,7 @@ export function refreshSession(): Promise<AuthResponse | null> {
     .then(async (res) => {
       if (!res.ok) return null;
       const data = (await res.json()) as AuthResponse;
-      accessToken = data.accessToken;
+      setAccessToken(data.accessToken);
       return data;
     })
     .catch(() => null)

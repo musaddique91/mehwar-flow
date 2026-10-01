@@ -22,6 +22,7 @@ export const REFRESH_WINDOW_MS: Record<Platform, number> = {
   threads: 7 * 86_400_000,
   tiktok: 60 * 60_000,
   snapchat: 15 * 60_000,
+  linkedin: 7 * 86_400_000,
 };
 
 const MAX_WINDOW_MS = Math.max(...Object.values(REFRESH_WINDOW_MS));

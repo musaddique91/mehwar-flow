@@ -111,6 +111,24 @@ export async function publishTarget(
         }
       }
 
+      // Inject custom thumbnail for YouTube (kind = 'thumbnail')
+      const thumbnailMediaId = ((target.options ?? {}) as TargetOptions).thumbnailMediaId;
+      if (thumbnailMediaId && storage) {
+        const thumbAsset = await prisma.mediaAsset.findUnique({ where: { id: thumbnailMediaId } });
+        if (thumbAsset && thumbAsset.status === 'READY') {
+          media.push({
+            kind: 'thumbnail',
+            mimeType: thumbAsset.mimeType,
+            sizeBytes: Number(thumbAsset.sizeBytes),
+            width: thumbAsset.width,
+            height: thumbAsset.height,
+            durationSec: null,
+            publicUrl: storage.publicUrl(thumbAsset.publicKey ?? thumbAsset.storageKey),
+            read: (range) => storage!.getBuffer(thumbAsset.storageKey, range),
+          });
+        }
+      }
+
       const result = await connector.publish({
         text: target.textOverride ?? target.post.text,
         media,

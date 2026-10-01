@@ -261,10 +261,65 @@ export class PostsService {
   }
 
   /**
-   * CSV import. Columns: `text` (required), `date` ("YYYY-MM-DD HH:mm" in the user's time zone,
-   * optional: without it the post is a draft), `channels` (platform names separated by `|` or `,`,
-   * or "all"; defaults to all connected channels), `first_comment` (optional).
+   * Cross-posts a published (or partially-failed) post to additional channels.
+   * Creates new PostTarget rows and immediately schedules them for publishing now.
    */
+  async crossPost(
+    orgId: string,
+    id: string,
+    channelIds: string[],
+    textOverride: string | null,
+  ): Promise<PostDto> {
+    const post = await this.load(orgId, id);
+    if (!['PUBLISHED', 'PARTIALLY_FAILED', 'FAILED'].includes(post.status))
+      throw new BadRequestException('Only published or failed posts can be cross-posted');
+
+    const db = this.db(orgId);
+
+    // Validate channels exist and are active
+    const found = await db.channel.findMany({
+      where: { id: { in: channelIds }, status: { not: 'DISCONNECTED' } },
+    });
+    if (found.length !== new Set(channelIds).size)
+      throw new BadRequestException('Unknown or disconnected channel');
+
+    // Disallow channels already targeted (regardless of their status)
+    const alreadyTargeted = new Set(post.targets.map((t) => t.channelId));
+    const duplicates = channelIds.filter((c) => alreadyTargeted.has(c));
+    if (duplicates.length)
+      throw new BadRequestException('One or more channels are already targeted by this post');
+
+    const now = new Date();
+    const newTargetIds: string[] = [];
+    for (const channelId of channelIds) {
+      const target = await db.postTarget.create({
+        data: {
+          organizationId: orgId,
+          postId: id,
+          channelId,
+          textOverride: textOverride ?? null,
+          options: {},
+          status: 'QUEUED',
+          scheduledAt: now,
+        },
+      });
+      newTargetIds.push(target.id);
+    }
+
+    for (const targetId of newTargetIds) {
+      await this.queues.schedulePublish({ organizationId: orgId, postTargetId: targetId }, now);
+    }
+
+    // Mark post as scheduled so the worker will process and update status properly
+    await db.post.update({
+      where: { id },
+      data: { status: 'SCHEDULED', scheduledAt: now },
+    });
+
+    await this.events.publish(orgId, { type: 'post.updated', postId: id });
+    return this.dto(orgId, id);
+  }
+
   async importCsv(orgId: string, csv: string, timezone: string, extended: boolean) {
     const parsed = Papa.parse<Record<string, string>>(csv.trim(), {
       header: true,

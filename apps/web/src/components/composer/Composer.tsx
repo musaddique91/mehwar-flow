@@ -156,19 +156,25 @@ export function Composer({
   channels,
   editing,
   onDone,
+  initialText,
+  focusedChannelId,
 }: {
   user: UserDto;
   channels: ChannelDto[];
   /** Post being edited, or null for a new post. */
   editing: PostDto | null;
   onDone: () => void;
+  initialText?: string;
+  focusedChannelId?: string | null;
 }) {
   const active = channels.filter((c) => c.status === 'ACTIVE');
-  const [text, setText] = useState(editing?.text ?? '');
+  const [text, setText] = useState(editing?.text ?? initialText ?? '');
   const [firstComment, setFirstComment] = useState<string | null>(editing?.firstComment ?? null);
-  const [selected, setSelected] = useState<string[]>(
-    editing ? editing.targets.map((t) => t.channelId) : [],
-  );
+  const [selected, setSelected] = useState<string[]>(() => {
+    if (editing) return editing.targets.map((t) => t.channelId);
+    if (focusedChannelId) return [focusedChannelId];
+    return [];
+  });
   const [drafts, setDrafts] = useState<Record<string, TargetDraft>>(() =>
     Object.fromEntries(
       (editing?.targets ?? []).map((t) => [
@@ -199,7 +205,14 @@ export function Composer({
       .toLowerCase() || 'you';
   const selectedChannels = active.filter((c) => selected.includes(c.id));
   const platforms = [...new Set(selectedChannels.map((c) => c.platform))];
-  const draftOf = (id: string) => drafts[id] ?? emptyDraft();
+  const draftOf = (id: string) => {
+    const d = drafts[id] ?? emptyDraft();
+    const ch = channels.find((c) => c.id === id);
+    if (ch?.platform === 'youtube' && d.options.madeForKids === undefined) {
+      return { ...d, options: { ...d.options, madeForKids: false } };
+    }
+    return d;
+  };
 
   // Keep processing media fresh when the worker reports progress.
   useLiveEvent((event) => {
@@ -213,14 +226,41 @@ export function Composer({
     if (editing) textareaRef.current?.focus();
   }, [editing]);
 
+  useEffect(() => {
+    if (focusedChannelId && !editing) {
+      setSelected([focusedChannelId]);
+      setPreview(focusedChannelId);
+    }
+  }, [focusedChannelId, editing]);
+
   const issues = useMemo(() => {
-    const mediaMeta = media.map((m) => ({
-      kind: m.kind,
-      mimeType: m.mimeType,
-      width: m.width ?? undefined,
-      height: m.height ?? undefined,
-      durationSec: m.durationSec ?? undefined,
-    }));
+    const pendingVideos = uploads.filter((u) => /\.(mp4|mov|webm|mkv|avi)$/i.test(u.name));
+    const pendingImages = uploads.filter((u) => !/\.(mp4|mov|webm|mkv|avi)$/i.test(u.name));
+
+    const mediaMeta = [
+      ...media.map((m) => ({
+        kind: m.kind,
+        mimeType: m.mimeType,
+        width: m.width ?? undefined,
+        height: m.height ?? undefined,
+        durationSec: m.durationSec ?? undefined,
+      })),
+      ...pendingVideos.map((u) => ({
+        kind: 'video' as const,
+        mimeType: 'video/mp4',
+        width: undefined,
+        height: undefined,
+        durationSec: undefined,
+      })),
+      ...pendingImages.map((u) => ({
+        kind: 'image' as const,
+        mimeType: 'image/jpeg',
+        width: undefined,
+        height: undefined,
+        durationSec: undefined,
+      })),
+    ];
+
     const out: ValidationIssue[] = [];
     for (const c of selectedChannels) {
       const d = draftOf(c.id);
@@ -262,12 +302,12 @@ export function Composer({
       (i, idx) =>
         out.findIndex((j) => j.platform === i.platform && j.message === i.message) === idx,
     );
-  }, [selectedChannels, drafts, text, media, user.xPremium]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedChannels, drafts, text, media, uploads, user.xPremium]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const blocking =
     hasBlockingIssues(issues) ||
     selectedChannels.length === 0 ||
-    (!text.trim() && media.length === 0);
+    (!text.trim() && media.length === 0 && uploads.length === 0);
   const processing =
     media.some((m) => m.status !== 'READY' && m.status !== 'FAILED') || uploads.length > 0;
   const previewChannel = selectedChannels.find((c) => c.id === preview) ?? selectedChannels[0];
@@ -279,7 +319,10 @@ export function Composer({
 
   async function addFiles(files: FileList | File[]) {
     for (const file of Array.from(files)) {
-      if (!/^(image|video)\//.test(file.type)) {
+      const isMedia =
+        /^(image|video)\//.test(file.type) ||
+        /\.(mp4|mov|webm|mkv|avi|jpg|jpeg|png|webp|gif)$/i.test(file.name);
+      if (!isMedia) {
         toast.error(`${file.name} is not an image or video`);
         continue;
       }
@@ -456,13 +499,13 @@ export function Composer({
       />
 
       {/* Channel chips */}
-      <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-3 sm:px-5">
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3 sm:px-5">
         {active.length === 0 ? (
           <Link
             href="/channels"
-            className="flex items-center gap-2 rounded-full border border-dashed border-fuchsia-400/60 px-4 py-2 text-sm font-semibold text-fuchsia-400"
+            className="flex items-center gap-1.5 rounded-full border border-dashed border-fuchsia-400/60 px-3 py-1 text-xs font-semibold text-fuchsia-400"
           >
-            <Link2 className="size-4" /> Connect a channel to start posting
+            <Link2 className="size-3.5" /> Connect a channel to start posting
           </Link>
         ) : (
           active.map((c) => {
@@ -473,25 +516,26 @@ export function Composer({
               <motion.button
                 key={c.id}
                 type="button"
-                whileTap={{ scale: 0.92 }}
+                whileTap={{ scale: 0.94 }}
                 onClick={() => toggleChannel(c.id)}
                 aria-pressed={on}
+                title={c.displayName}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3 text-sm font-semibold transition-colors',
+                  'flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 text-xs font-semibold transition-all shadow-xs',
                   on
-                    ? 'border-transparent bg-fg text-[var(--bg)]'
-                    : 'border-line text-muted hover:text-fg',
+                    ? 'border-transparent bg-fg text-[var(--bg)] ring-1 ring-fg/20'
+                    : 'border-line/80 bg-elevated/40 text-muted hover:border-line hover:text-fg hover:bg-elevated',
                 )}
               >
                 <span
-                  className="flex size-7 items-center justify-center rounded-full text-white"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full text-white shadow-xs"
                   style={{ background: on ? PLATFORM_BRAND[c.platform].gradient : 'var(--line)' }}
                 >
-                  <PlatformIcon platform={c.platform} className="size-3.5" />
+                  <PlatformIcon platform={c.platform} className="size-2.5" />
                 </span>
-                <span className="max-w-32 truncate">{c.displayName}</span>
+                <span className="max-w-28 truncate">{c.displayName}</span>
                 {on && c.platform !== 'youtube' && (
-                  <CharRing count={countCharacters(t)} limit={limit} size={22} />
+                  <CharRing count={countCharacters(t)} limit={limit} size={16} />
                 )}
               </motion.button>
             );
@@ -618,7 +662,8 @@ export function Composer({
                         text={draftOf(previewChannel.id).textOverride ?? text}
                         name={previewChannel.displayName}
                         handle={previewChannel.username ?? handle}
-                        mediaUrl={media[0]?.thumbnailUrl ?? null}
+                        mediaUrl={media[0]?.thumbnailUrl ?? (media[0]?.kind === 'image' ? media[0]?.url : null) ?? null}
+                        videoUrl={previewChannel.platform === 'youtube' ? (media.find(m => m.kind === 'video')?.url ?? null) : null}
                       />
                     </motion.div>
                   )}

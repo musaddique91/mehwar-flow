@@ -22,8 +22,10 @@ export interface PreviewProps {
   text: string;
   name: string;
   handle: string;
-  /** Thumbnail of the first attached media, if any. */
+  /** Thumbnail/image URL of the first attached media. */
   mediaUrl?: string | null;
+  /** Direct video URL — used by YouTube preview to show a playable video. */
+  videoUrl?: string | null;
   className?: string;
 }
 
@@ -80,7 +82,7 @@ function RichText({ text, className }: { text: string; className?: string }) {
 
 const placeholder = 'Your post will appear here ✨';
 
-export function PostPreview({ platform, text, name, handle, mediaUrl, className }: PreviewProps) {
+export function PostPreview({ platform, text, name, handle, mediaUrl, videoUrl, className }: PreviewProps) {
   const body = text.trim() || placeholder;
   const frame = 'rounded-2xl border border-line bg-elevated text-[14px] text-fg shadow-xl';
 
@@ -238,15 +240,35 @@ export function PostPreview({ platform, text, name, handle, mediaUrl, className 
       return (
         <div className={cn(frame, 'overflow-hidden', className)}>
           <div
-            className="relative aspect-video"
-            style={{ background: PLATFORM_BRAND.youtube.gradient }}
+            className="relative aspect-video overflow-hidden bg-black/90"
+            style={{ background: (mediaUrl || videoUrl) ? undefined : PLATFORM_BRAND.youtube.gradient }}
           >
-            <span className="absolute inset-0 m-auto flex size-14 items-center justify-center rounded-2xl bg-black/40 backdrop-blur">
-              <Play className="size-6 fill-white text-white" />
-            </span>
-            <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-[11px] font-semibold text-white">
-              0:42
-            </span>
+            {videoUrl ? (
+              // Playable video preview
+              <video
+                src={videoUrl}
+                className="size-full object-cover"
+                controls
+                preload="metadata"
+                poster={mediaUrl ?? undefined}
+              />
+            ) : mediaUrl ? (
+              // Static thumbnail only (e.g. after processing when video isn't presigned)
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={mediaUrl} alt="" className="size-full object-cover" />
+                <span className="absolute inset-0 m-auto flex size-14 items-center justify-center rounded-2xl bg-black/40 backdrop-blur">
+                  <Play className="size-6 fill-white text-white" />
+                </span>
+              </>
+            ) : (
+              <div className="flex size-full flex-col items-center justify-center gap-2 p-4 text-center text-white/80">
+                <span className="flex size-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+                  <Play className="size-6 text-white" />
+                </span>
+                <span className="text-xs font-medium">Attach a video to preview YouTube player</span>
+              </div>
+            )}
           </div>
           <div className="flex gap-3 p-3">
             <Avatar name={name} size={36} />
@@ -254,6 +276,49 @@ export function PostPreview({ platform, text, name, handle, mediaUrl, className 
               <p className="line-clamp-2 text-sm font-semibold">{body.slice(0, 100)}</p>
               <p className="mt-0.5 text-xs text-muted">{name} · 0 views · just now</p>
             </div>
+          </div>
+        </div>
+      );
+    case 'linkedin':
+      return (
+        <div className={cn(frame, 'overflow-hidden', className)}>
+          <div className="flex items-start gap-3 p-4 pb-2">
+            <Avatar name={name} size={44} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-fg truncate">{name}</p>
+                <Ellipsis className="size-4 text-muted shrink-0" />
+              </div>
+              <p className="text-xs text-muted truncate">@{handle || 'member'}</p>
+              <p className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
+                <span>Just now</span>
+                <span>•</span>
+                <span>🌐</span>
+              </p>
+            </div>
+          </div>
+          <RichText text={body} className="px-4 py-2 text-sm leading-relaxed" />
+          {mediaUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mediaUrl} alt="" className="max-h-80 w-full object-cover border-y border-line" />
+          )}
+          <div className="grid grid-cols-4 border-t border-line text-xs font-semibold text-muted">
+            {[
+              [ThumbsUp, 'Like'],
+              [MessageCircle, 'Comment'],
+              [Repeat2, 'Repost'],
+              [Send, 'Send'],
+            ].map(([Icon, label]) => {
+              const I = Icon as typeof ThumbsUp;
+              return (
+                <span
+                  key={label as string}
+                  className="flex items-center justify-center gap-1.5 py-3 hover:text-fg transition"
+                >
+                  <I className="size-3.5" /> {label as string}
+                </span>
+              );
+            })}
           </div>
         </div>
       );

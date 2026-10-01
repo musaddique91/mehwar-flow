@@ -7,7 +7,7 @@ const envSchema = z.object({
   /** Browser origin(s) allowed to call the API with credentials, comma separated. */
   WEB_ORIGIN: z.string().default('http://localhost:3000'),
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
-  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(86400),
   /** Max login/register attempts per IP per minute. */
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
@@ -15,11 +15,14 @@ const envSchema = z.object({
   MASTER_KEYS: z.string().min(1),
   MASTER_KEY_CURRENT_VERSION: z.coerce.number().int().positive().default(1),
   /** Path of the refresh cookie as seen by the browser ("/api/auth" when proxied by the web app). */
-  REFRESH_COOKIE_PATH: z.string().startsWith('/').default('/auth'),
+  REFRESH_COOKIE_PATH: z.string().startsWith('/').default('/'),
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
   /** Anthropic API key for the AI assistant (optional). */
   ANTHROPIC_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('claude-opus-5-5'),
+  /** NVIDIA API key for NVIDIA NIM free models. */
+  NVIDIA_API_KEY: z.string().optional(),
+  NVIDIA_MODEL: z.string().default('meta/llama-3.2-11b-vision-instruct'),
   /** Stripe billing (optional; without it everyone is on the self-hosted unlimited plan). */
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
