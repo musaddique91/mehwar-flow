@@ -24,7 +24,8 @@ FROM deps AS build
 ARG API_INTERNAL_URL=http://api:4000
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
 COPY . .
-RUN pnpm turbo run build
+# No turbo cache: it never survives an image build, and replaying it fails under amd64 emulation.
+RUN pnpm turbo run build --cache=local:,remote:
 
 FROM build AS api
 ENV NODE_ENV=production

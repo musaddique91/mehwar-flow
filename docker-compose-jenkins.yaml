@@ -3,6 +3,8 @@
 #
 # One image (${APP_IMAGE_TAG}, the Dockerfile's default `app` stage) runs every process.
 # Postgres (`postgres`) and MinIO (`minio`) are the shared containers on mvx_shared_network.
+# Already provisioned on the server: DB mehwar_flow (owner mehwar_owner, runtime role mehwar_app),
+# MinIO bucket mehwar-flow-dev-media with user mehwar-flow-dev-app scoped to it.
 #
 # Service keys are prefixed on purpose: the deploy step runs `docker rm -f <service key>` before
 # `up`, so a bare key like `api` or `redis` would remove another project's container on the host.
@@ -49,38 +51,7 @@ services:
     command: ['./node_modules/.bin/prisma', 'migrate', 'deploy']
     environment:
       DATABASE_URL: postgresql://mehwar_app:${MEHWAR_DB_APP_PASSWORD}@${DB_HOST}:5432/${DB_NAME}
-      DIRECT_DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${DB_HOST}:5432/${DB_NAME}
-    networks:
-      - mvx_shared_network
-    restart: 'no'
-
-  # Creates the media bucket on the shared MinIO and a key scoped to it. Idempotent.
-  mehwar-flow-minio-init:
-    image: cgr.dev/chainguard/minio-client:latest-dev
-    container_name: mehwar-flow-minio-init
-    entrypoint: ['/bin/sh', '-c']
-    command:
-      - |
-        set -eu
-        mc alias set shared http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
-        mc mb --ignore-existing "shared/$$S3_BUCKET"
-        # Only public/ is anonymously readable: social platforms pull media from there.
-        mc anonymous set download "shared/$$S3_BUCKET/public"
-        cat > /tmp/policy.json <<POLICY
-        {"Version":"2012-10-17","Statement":[
-          {"Effect":"Allow","Action":["s3:ListBucket","s3:GetBucketLocation","s3:ListBucketMultipartUploads"],"Resource":["arn:aws:s3:::$$S3_BUCKET"]},
-          {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":["arn:aws:s3:::$$S3_BUCKET/*"]}]}
-        POLICY
-        mc admin policy create shared "$$S3_BUCKET-app" /tmp/policy.json
-        mc admin user add shared "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"
-        mc admin policy attach shared "$$S3_BUCKET-app" --user "$$S3_ACCESS_KEY" || true
-        echo "minio ready: bucket $$S3_BUCKET"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-      S3_BUCKET: ${S3_BUCKET}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${MEHWAR_S3_SECRET_KEY}
+      DIRECT_DATABASE_URL: postgresql://mehwar_owner:${MEHWAR_DB_OWNER_PASSWORD}@${DB_HOST}:5432/${DB_NAME}
     networks:
       - mvx_shared_network
     restart: 'no'
@@ -163,8 +134,8 @@ services:
       TOKEN_REFRESH_INTERVAL_MS: ${TOKEN_REFRESH_INTERVAL_MS}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_SECURE: ${SMTP_SECURE}
-      SMTP_USER: ${MAVERICK_HR_SMTP_USERNAME}
-      SMTP_PASSWORD: ${MAVERICK_HR_SMTP_PASSWORD}
+      SMTP_USER: ${MEHWAR_SMTP_USERNAME}
+      SMTP_PASSWORD: ${MEHWAR_SMTP_PASSWORD}
       MAIL_FROM: ${MAIL_FROM}
     depends_on:
       mehwar-flow-migrate:
