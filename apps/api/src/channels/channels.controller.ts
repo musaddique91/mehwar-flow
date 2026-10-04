@@ -8,9 +8,10 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  Req,
   Res,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { PLATFORMS, type Platform } from '@mehwar/shared';
 import type { AuthContext } from '../auth/auth.types';
@@ -108,8 +109,19 @@ export class ChannelsController {
   async connect(
     @CurrentAuth() auth: AuthContext,
     @Param('platform', platformPipe) platform: Platform,
+    @Req() req: Request,
   ) {
-    return { url: await this.channels.startConnect(auth.organizationId, auth.userId, platform) };
+    const clientOrigin =
+      (req.headers.origin as string) ||
+      (req.headers.referer ? new URL(req.headers.referer).origin : undefined);
+    return {
+      url: await this.channels.startConnect(
+        auth.organizationId,
+        auth.userId,
+        platform,
+        clientOrigin,
+      ),
+    };
   }
 
   /** OAuth redirect target. Public: identity comes from the one-time `state` stored in Redis. */
@@ -120,8 +132,9 @@ export class ChannelsController {
     @Query() query: Record<string, string>,
     @Res() res: Response,
   ) {
-    const path = await this.channels.handleCallback(platform, query);
-    res.redirect(302, `${this.channels.webOrigin}${path}`);
+    const result = await this.channels.handleCallback(platform, query);
+    const origin = result.origin || this.channels.webOrigin;
+    res.redirect(302, `${origin}${result.path}`);
   }
 
   @Get('pending/:session')

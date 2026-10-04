@@ -9,6 +9,16 @@ export const metadata: Metadata = {
   title: { default: 'Mehwar Flow', template: '%s · Mehwar Flow' },
   description:
     'Write once, preview everywhere, and publish to all your social channels from one place.',
+  icons: {
+    icon: [
+      { url: '/brand/maverick-pwa-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/brand/maverick-pwa-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    shortcut: '/brand/maverick-pwa-192.png',
+    apple: [
+      { url: '/brand/maverick-pwa-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+  },
 };
 
 export const viewport: Viewport = {

@@ -4,8 +4,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LiveEvent } from '@mehwar/shared';
 import { api } from './api';
 
-/** Topics that pages can refetch on. Mutations and live events publish them. */
-export type Topic = 'posts' | 'channels' | 'media' | 'notifications' | 'slots' | 'billing' | 'analytics' | 'comments' | 'ai';
+export type Topic =
+  | 'posts'
+  | 'channels'
+  | 'media'
+  | 'notifications'
+  | 'slots'
+  | 'billing'
+  | 'analytics'
+  | 'comments'
+  | 'ai'
+  | 'customers'
+  | 'customer-groups'
+  | 'whatsapp';
 
 const TOPIC_EVENT = 'mf:refresh';
 const LIVE_EVENT = 'mf:live';

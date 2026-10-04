@@ -4,3 +4,6 @@
 **/.turbo
 **/.env
 .git
+**/.wwebjs_auth
+**/.wwebjs_cache
+certs

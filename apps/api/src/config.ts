@@ -35,6 +35,16 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => (v === undefined ? undefined : v === 'true')),
+  /** SMTP server for email notifications & customer sharing (optional, e.g. Mailpit). */
+  SMTP_URL: z.string().optional().default('smtp://127.0.0.1:1025'),
+  /** Alternative to SMTP_URL for credentials that would need URL-escaping (e.g. an email username). */
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  /** Implicit TLS; defaults to true on port 465, otherwise STARTTLS is negotiated. */
+  SMTP_SECURE: z.enum(['true', 'false']).optional(),
+  EMAIL_FROM: z.string().default('Mehwar Flow <noreply@mehwar.io>'),
 });
 
 export type AppConfig = z.infer<typeof envSchema> & { cookieSecure: boolean };

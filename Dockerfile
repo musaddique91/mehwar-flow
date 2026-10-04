@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 WORKDIR /app
 
 FROM base AS deps
+# whatsapp-web.js uses the system Chromium (CHROME_BIN), so skip puppeteer's own browser download.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
@@ -57,9 +59,14 @@ CMD ["node", "apps/web/server.js"]
 # process via working_dir/command in docker-compose-jenkins.yaml.
 FROM build AS app
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/* \
+# Chromium runs WhatsApp Web (whatsapp-web.js). Its session lives in apps/api/.wwebjs_auth,
+# which compose mounts as a volume; created here so the volume starts out owned by `node`.
+ENV CHROME_BIN=/usr/bin/chromium
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg chromium fonts-liberation \
+  && rm -rf /var/lib/apt/lists/* \
   && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static \
-  && chown -R node:node apps/web/.next/standalone
+  && mkdir -p apps/api/.wwebjs_auth apps/api/.wwebjs_cache \
+  && chown -R node:node apps/web/.next/standalone apps/api/.wwebjs_auth apps/api/.wwebjs_cache
 USER node
 WORKDIR /app/apps/api
 EXPOSE 3000 4000

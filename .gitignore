@@ -9,3 +9,7 @@ coverage/
 !.env.example
 *.tsbuildinfo
 next-env.d.ts
+certs/
+# whatsapp-web.js session (a live WhatsApp login) and its page cache
+.wwebjs_auth/
+.wwebjs_cache/

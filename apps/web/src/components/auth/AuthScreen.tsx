@@ -12,6 +12,7 @@ import { PostPreview } from '@/components/composer/PostPreview';
 import { EASE_OUT, FadeIn, GradientBlobs } from '@/components/motion';
 import { Button, Card, Input } from '@/components/ui';
 import { Logo } from '@/components/ui/Logo';
+import { Wordmark } from '@/components/ui/Wordmark';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -73,6 +74,10 @@ function Showcase() {
         <p className="mt-6 text-center text-lg font-semibold">
           One post. <span className="brand-text">Every feed.</span>
         </p>
+        <div className="mt-5 flex flex-col items-center justify-center gap-1.5 opacity-80 transition hover:opacity-100">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted">A product of</span>
+          <Wordmark height={22} />
+        </div>
       </div>
     </div>
   );

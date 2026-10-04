@@ -45,7 +45,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
-    return this.respond(res, await this.auth.register(body, clientInfo(req)));
+    return this.respond(res, await this.auth.register(body, clientInfo(req)), req);
   }
 
   @Public()
@@ -57,7 +57,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
-    return this.respond(res, await this.auth.login(body, clientInfo(req)));
+    return this.respond(res, await this.auth.login(body, clientInfo(req)), req);
   }
 
   @Public()
@@ -70,7 +70,7 @@ export class AuthController {
     const token = req.cookies?.[REFRESH_COOKIE] as string | undefined;
     if (!token) throw new UnauthorizedException('Missing refresh token');
     try {
-      return this.respond(res, await this.auth.refresh(token, clientInfo(req)));
+      return this.respond(res, await this.auth.refresh(token, clientInfo(req)), req);
     } catch (err) {
       res.clearCookie(REFRESH_COOKIE, { path: this.config.REFRESH_COOKIE_PATH });
       throw err;
@@ -92,10 +92,12 @@ export class AuthController {
     return this.auth.toDto(user);
   }
 
-  private respond(res: Response, tokens: IssuedTokens): AuthResponse {
+  private respond(res: Response, tokens: IssuedTokens, req?: Request): AuthResponse {
+    const isHttps = req ? Boolean(req.secure || req.headers['x-forwarded-proto'] === 'https') : false;
+    const secure = this.config.COOKIE_SECURE !== undefined ? (this.config.cookieSecure && isHttps) : isHttps;
     res.cookie(REFRESH_COOKIE, tokens.refreshToken, {
       httpOnly: true,
-      secure: this.config.cookieSecure,
+      secure,
       sameSite: 'lax',
       path: this.config.REFRESH_COOKIE_PATH,
       expires: tokens.refreshExpiresAt,

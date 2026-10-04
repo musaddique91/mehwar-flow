@@ -7,11 +7,15 @@ import {
   ChartNoAxesColumn,
   House,
   Images,
+  KeyRound,
   LogOut,
   MessageSquare,
   Plug,
   Settings,
+  ShieldCheck,
   SquarePen,
+  User,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -19,9 +23,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import type { NotificationDto } from '@mehwar/shared';
+import { PrivacyModal } from '@/components/modals/PrivacyModal';
+import { ProfileModal } from '@/components/modals/ProfileModal';
+import { SecurityModal } from '@/components/modals/SecurityModal';
 import { GradientBlobs } from '@/components/motion';
 import { Avatar } from '@/components/ui';
 import { Logo } from '@/components/ui/Logo';
+import { Wordmark } from '@/components/ui/Wordmark';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -42,6 +50,7 @@ const NAV: NavItem[] = [
   { href: '/comments', label: 'Comments', icon: MessageSquare },
   { href: '/media', label: 'Media', icon: Images },
   { href: '/analytics', label: 'Analytics', icon: ChartNoAxesColumn },
+  { href: '/users', label: 'User Management', icon: Users },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -98,8 +107,12 @@ function Sidebar() {
       >
         <SquarePen className="size-4" /> Create post
       </Link>
-      <div className="mt-auto">
+      <div className="mt-auto space-y-2">
         <UserMenu />
+        <div className="flex items-center justify-between px-3 py-1.5 text-[11px] text-muted">
+          <span className="opacity-70">Powered by</span>
+          <Wordmark height={14} />
+        </div>
       </div>
     </aside>
   );
@@ -109,68 +122,100 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const ref = useClickOutside(() => setOpen(false));
 
   if (!user) return null;
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          'flex w-full items-center gap-3 rounded-2xl text-left transition hover:bg-line',
-          compact ? 'p-1' : 'p-2',
-        )}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        <Avatar name={user.name} size={compact ? 36 : 40} />
-        {!compact && (
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold">{user.name}</span>
-            <span className="block truncate text-xs text-muted">{user.email}</span>
-          </span>
-        )}
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            role="menu"
-            initial={{ opacity: 0, y: compact ? -8 : 8, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: compact ? -8 : 8, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
-            className={cn(
-              'glass absolute z-50 w-56 rounded-2xl bg-card-strong p-1.5 shadow-2xl',
-              compact ? 'right-0 top-12' : 'bottom-16 left-0',
-            )}
-          >
-            {[
-              { href: '/settings', label: 'Settings', icon: Settings },
-              { href: '/media', label: 'Media library', icon: Images },
-            ].map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-line"
-              >
-                <l.icon className="size-4" /> {l.label}
-              </Link>
-            ))}
-            <button
-              onClick={async () => {
-                await logout();
-                toast('See you soon 👋');
-                router.replace('/login');
-              }}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-500/10"
+    <>
+      <div ref={ref} className="relative">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-2xl text-left transition hover:bg-line',
+            compact ? 'p-1' : 'p-2',
+          )}
+          aria-haspopup="menu"
+          aria-expanded={open}
+        >
+          <Avatar name={user.name} size={compact ? 36 : 40} />
+          {!compact && (
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold">{user.name}</span>
+              <span className="block truncate text-xs text-muted">{user.email}</span>
+            </span>
+          )}
+        </button>
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              role="menu"
+              initial={{ opacity: 0, y: compact ? -8 : 8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: compact ? -8 : 8, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className={cn(
+                'glass absolute z-50 w-60 rounded-2xl bg-card-strong p-1.5 shadow-2xl border border-line',
+                compact ? 'right-0 top-12' : 'bottom-16 left-0',
+              )}
             >
-              <LogOut className="size-4" /> Log out
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setProfileOpen(true);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-line text-fg transition"
+              >
+                <User className="size-4 text-fuchsia-500" /> Profile
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setSecurityOpen(true);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-line text-fg transition"
+              >
+                <KeyRound className="size-4 text-primary" /> Security & Password
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setPrivacyOpen(true);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-line text-fg transition"
+              >
+                <ShieldCheck className="size-4 text-emerald-500" /> Privacy & Data
+              </button>
+
+              <div className="my-1 border-t border-line/60" />
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await logout();
+                  toast('See you soon 👋');
+                  router.replace('/login');
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-500/10 transition"
+              >
+                <LogOut className="size-4" /> Log out
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <SecurityModal open={securityOpen} onClose={() => setSecurityOpen(false)} />
+      <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+    </>
   );
 }
 

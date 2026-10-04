@@ -23,6 +23,8 @@ interface OAuthState {
   userId: string;
   platform: Platform;
   verifier?: string;
+  redirectUri?: string;
+  origin?: string;
 }
 
 interface PendingAccounts {
@@ -66,8 +68,34 @@ export class ChannelsService {
     return this.config.WEB_ORIGIN.split(',')[0]!.trim().replace(/\/$/, '');
   }
 
-  redirectUri(platform: Platform): string {
-    return `${this.webOrigin}/api/channels/callback/${platform}`;
+  resolveOrigin(clientOrigin?: string, platform?: Platform): string {
+    const configuredOrigins = this.config.WEB_ORIGIN.split(',').map((o) => o.trim().replace(/\/$/, ''));
+    const httpsOrigin = configuredOrigins.find((o) => o.startsWith('https://')) ?? 'https://localhost:3000';
+
+    // Platforms that strictly require HTTPS: Threads, Meta (Facebook & Instagram), TikTok
+    const requiresHttps =
+      platform === 'facebook' ||
+      platform === 'instagram' ||
+      platform === 'threads' ||
+      platform === 'tiktok';
+
+    if (requiresHttps) {
+      if (clientOrigin && clientOrigin.startsWith('https://')) {
+        return clientOrigin.replace(/\/$/, '');
+      }
+      return httpsOrigin;
+    }
+
+    if (clientOrigin) {
+      return clientOrigin.replace(/\/$/, '');
+    }
+
+    return this.webOrigin;
+  }
+
+  redirectUri(platform: Platform, origin?: string): string {
+    const base = (origin || this.resolveOrigin(undefined, platform)).replace(/\/$/, '');
+    return `${base}/api/channels/callback/${platform}`;
   }
 
   available() {
@@ -556,42 +584,62 @@ export class ChannelsService {
     };
   }
 
-  async startConnect(organizationId: string, userId: string, platform: Platform): Promise<string> {
+  async startConnect(
+    organizationId: string,
+    userId: string,
+    platform: Platform,
+    clientOrigin?: string,
+  ): Promise<string> {
     const connector = this.connectors.get(platform);
     const state = randomToken(24);
     const pkce = connector.usesPkce ? createPkcePair() : undefined;
-    const data: OAuthState = { organizationId, userId, platform, verifier: pkce?.verifier };
+    const origin = this.resolveOrigin(clientOrigin, platform);
+    const redirectUri = this.redirectUri(platform, origin);
+    const data: OAuthState = {
+      organizationId,
+      userId,
+      platform,
+      verifier: pkce?.verifier,
+      redirectUri,
+      origin: clientOrigin ? clientOrigin.replace(/\/$/, '') : origin,
+    };
     await this.redis.set(`oauth:state:${state}`, JSON.stringify(data), 'EX', STATE_TTL);
     return connector.getAuthUrl({
       state,
-      redirectUri: this.redirectUri(platform),
+      redirectUri,
       codeChallenge: pkce?.challenge,
     });
   }
 
-  /** Returns the path in the web app to redirect the browser to. */
+  /** Returns the path and origin in the web app to redirect the browser to. */
   async handleCallback(
     platform: Platform,
     query: Record<string, string | undefined>,
-  ): Promise<string> {
-    const fail = (msg: string) => `/channels?error=${encodeURIComponent(msg)}`;
+  ): Promise<{ path: string; origin?: string }> {
+    const defaultOrigin = this.webOrigin;
+    const fail = (msg: string, orig?: string) => ({
+      path: `/channels?error=${encodeURIComponent(msg)}`,
+      origin: orig ?? defaultOrigin,
+    });
     if (!query.state) return fail('Missing state');
     const raw = await this.redis.getdel(`oauth:state:${query.state}`);
     if (!raw) return fail('This connection link expired. Please try again.');
     const state = JSON.parse(raw) as OAuthState;
+    const returnOrigin = state.origin ?? defaultOrigin;
     if (query.error || !query.code) {
       let desc = query.error_description ?? query.error ?? 'Connection was cancelled';
       if (platform === 'linkedin' && (desc.includes('openid') || (query.error && query.error.includes('openid')))) {
         desc = 'LinkedIn scope "openid" not authorized. In LinkedIn Developer Portal, go to the Products tab and add "Sign In with LinkedIn using OpenID Connect" (and "Share on LinkedIn").';
       }
-      return fail(desc);
+      return fail(desc, returnOrigin);
     }
 
     try {
       const connector = this.connectors.get(platform);
+      const redirectUri = state.redirectUri || this.redirectUri(platform);
       const userToken = await connector.exchangeCode(
         query.code,
-        this.redirectUri(platform),
+        redirectUri,
         state.verifier,
       );
       const accounts = await connector.listAccounts(userToken);
@@ -600,6 +648,7 @@ export class ChannelsService {
           platform === 'instagram'
             ? 'No Instagram professional account is linked to your Facebook Pages.'
             : 'No accounts were found to connect.',
+          returnOrigin,
         );
       }
       if (accounts.length === 1) {
@@ -610,7 +659,7 @@ export class ChannelsService {
           accounts[0]!,
           userToken,
         );
-        return `/channels?connected=${platform}`;
+        return { path: `/channels?connected=${platform}`, origin: returnOrigin };
       }
       const session = randomToken(24);
       const pending: PendingAccounts = {
@@ -630,10 +679,10 @@ export class ChannelsService {
         'EX',
         STATE_TTL,
       );
-      return `/channels/select?session=${session}&platform=${platform}`;
+      return { path: `/channels/select?session=${session}&platform=${platform}`, origin: returnOrigin };
     } catch (err) {
       this.logger.warn(`OAuth callback for ${platform} failed: ${(err as Error).message}`);
-      return fail((err as Error).message || 'Could not connect the account');
+      return fail((err as Error).message || 'Could not connect the account', returnOrigin);
     }
   }
 

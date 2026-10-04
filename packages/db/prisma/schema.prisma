@@ -67,6 +67,9 @@ model Organization {
   metrics       MetricSnapshot[]
   aiUsage       AiUsage[]
   subscription  Subscription?
+  customers     Customer[]
+  customerGroups CustomerGroup[]
+  whatsappSession WhatsappSession?
 
   @@map("organizations")
 }
@@ -385,3 +388,72 @@ model Subscription {
 
   @@map("subscriptions")
 }
+
+model Customer {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  mobileNumber   String    @map("mobile_number")
+  whatsappNumber String    @map("whatsapp_number")
+  email          String?
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  groupMembers   CustomerGroupMember[]
+
+  @@index([organizationId, name])
+  @@index([organizationId, email])
+  @@index([organizationId, mobileNumber])
+  @@map("customers")
+}
+
+model CustomerGroup {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  description    String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members        CustomerGroupMember[]
+
+  @@index([organizationId, name])
+  @@map("customer_groups")
+}
+
+model CustomerGroupMember {
+  id         String        @id @default(uuid()) @db.Uuid
+  groupId    String        @map("group_id") @db.Uuid
+  customerId String        @map("customer_id") @db.Uuid
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  group      CustomerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, customerId])
+  @@index([groupId])
+  @@index([customerId])
+  @@map("customer_group_members")
+}
+
+model WhatsappSession {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @unique @map("organization_id") @db.Uuid
+  status         String    @default("DISCONNECTED")
+  phoneNumber    String?   @map("phone_number")
+  pushname       String?   @map("pushname")
+  platform       String?   @default("WhatsApp Web")
+  connectedAt    DateTime? @map("connected_at")
+  disconnectedAt DateTime? @map("disconnected_at")
+  metadata       Json?     @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_sessions")
+}
+

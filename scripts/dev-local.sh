@@ -82,5 +82,5 @@ for app in "${APPS[@]}"; do
   PIDS+=($!)
 done
 
-echo "==> Running ${APPS[*]}  (web http://localhost:3000, api http://localhost:4000/health)"
+echo "==> Running ${APPS[*]}  (web http://localhost:3000 & https://localhost:3000, api http://localhost:4000/health)"
 wait

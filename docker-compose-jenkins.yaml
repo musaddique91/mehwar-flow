@@ -98,6 +98,15 @@ services:
       STRIPE_PRICE_BUSINESS: ${STRIPE_PRICE_BUSINESS}
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Customer sharing emails (same Brevo account as the worker).
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${MEHWAR_SMTP_USERNAME}
+      SMTP_PASSWORD: ${MEHWAR_SMTP_PASSWORD}
+      EMAIL_FROM: ${MAIL_FROM}
+    volumes:
+      # WhatsApp Web login (whatsapp-web.js LocalAuth); survives redeploys.
+      - mehwar-flow-whatsapp:/app/apps/api/.wwebjs_auth
     depends_on:
       mehwar-flow-migrate:
         condition: service_completed_successfully
@@ -169,6 +178,8 @@ services:
 volumes:
   mehwar-flow-redis-data:
     name: mehwar-flow-redis-data
+  mehwar-flow-whatsapp:
+    name: mehwar-flow-whatsapp
 
 networks:
   mehwar-flow_network:

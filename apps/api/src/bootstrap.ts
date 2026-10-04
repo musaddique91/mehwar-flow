@@ -40,7 +40,23 @@ export function configureApp(app: NestExpressApplication, config: AppConfig) {
   }
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cookieParser());
-  app.enableCors({ origin: config.WEB_ORIGIN.split(',').map((o) => o.trim()), credentials: true });
+  const configuredOrigins = config.WEB_ORIGIN.split(',').map((o) => o.trim().replace(/\/$/, ''));
+  app.enableCors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const cleanOrigin = origin.replace(/\/$/, '');
+      if (configuredOrigins.includes(cleanOrigin)) return callback(null, true);
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin)) {
+        return callback(null, true);
+      }
+      const originHost = cleanOrigin.replace(/^https?:\/\//, '');
+      if (configuredOrigins.some((co) => co.replace(/^https?:\/\//, '') === originHost)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+  });
   app.useBodyParser('json', { limit: '5mb' });
   mountQueueDashboard(app, config);
   app.enableShutdownHooks();

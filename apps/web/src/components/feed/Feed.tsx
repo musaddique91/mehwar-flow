@@ -22,6 +22,7 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Users,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ import {
   type PostStatusDto,
   type TargetStatusDto,
 } from '@mehwar/shared';
+import { ShareToCustomersModal } from '@/components/modals/ShareToCustomersModal';
 import { Stagger, StaggerItem } from '@/components/motion';
 import { Button, Card, Modal, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -551,6 +553,7 @@ function PostMenu({ post, onEdit }: { post: PostDto; onEdit: (p: PostDto) => voi
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [crossPostOpen, setCrossPostOpen] = useState(false);
+  const [shareCustomersOpen, setShareCustomersOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -604,8 +607,11 @@ function PostMenu({ post, onEdit }: { post: PostDto; onEdit: (p: PostDto) => voi
 
   // "Publish to more platforms" — only shown once a post is fully/partially published
   const canCrossPost = ['PUBLISHED', 'PARTIALLY_FAILED', 'FAILED'].includes(post.status);
+  const canShareToCustomers = post.targets.some(
+    (t) => t.externalUrl && (t.status === 'PUBLISHED' || t.status === 'QUEUED'),
+  );
   const canDelete = post.status !== 'PUBLISHING';
-  if (items.length === 0 && !canCrossPost && !canDelete) return null;
+  if (items.length === 0 && !canCrossPost && !canShareToCustomers && !canDelete) return null;
 
   return (
     <>
@@ -630,7 +636,24 @@ function PostMenu({ post, onEdit }: { post: PostDto; onEdit: (p: PostDto) => voi
               transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
               className="glass absolute right-0 top-9 z-30 w-60 rounded-2xl bg-card-strong p-1.5 shadow-2xl border border-line backdrop-blur-2xl"
             >
-              {/* 1. "Publish to more platforms" — on top */}
+              {/* 0. "Share to Customers" — on the very first before share to platform */}
+              {canShareToCustomers && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setShareCustomersOpen(true);
+                  }}
+                  className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-fg transition hover:bg-emerald-500/10 hover:text-emerald-500 dark:hover:text-emerald-400"
+                >
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-500 transition-colors group-hover:bg-emerald-500 group-hover:text-white shadow-sm">
+                    <Users className="size-3.5" />
+                  </span>
+                  <span className="truncate">Share to Customers</span>
+                </button>
+              )}
+
+              {/* 1. "Publish to more platforms" */}
               {canCrossPost && (
                 <button
                   type="button"
@@ -739,6 +762,12 @@ function PostMenu({ post, onEdit }: { post: PostDto; onEdit: (p: PostDto) => voi
         post={post}
         open={crossPostOpen}
         onClose={() => setCrossPostOpen(false)}
+      />
+
+      <ShareToCustomersModal
+        post={post}
+        open={shareCustomersOpen}
+        onClose={() => setShareCustomersOpen(false)}
       />
     </>
   );

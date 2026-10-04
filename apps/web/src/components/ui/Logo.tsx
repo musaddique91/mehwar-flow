@@ -1,29 +1,58 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
 
-export function Logo({ className, href = '/' }: { className?: string; href?: string }) {
+interface LogoProps {
+  className?: string;
+  href?: string;
+  size?: 'sm' | 'md' | 'lg';
+  subtitle?: string;
+}
+
+export function Logo({
+  className,
+  href = '/',
+  size = 'md',
+  subtitle,
+}: LogoProps) {
+  const iconDimensions = size === 'sm' ? 28 : size === 'lg' ? 44 : 36;
+  const containerClasses =
+    size === 'sm'
+      ? 'size-7 rounded-lg p-0.5'
+      : size === 'lg'
+        ? 'size-11 rounded-2xl p-1'
+        : 'size-9 rounded-xl p-1';
+
   return (
     <Link
       href={href}
       className={cn('group flex items-center gap-2.5 font-bold tracking-tight', className)}
     >
-      <span className="brand-gradient relative flex size-9 items-center justify-center rounded-xl shadow-lg shadow-fuchsia-500/30 transition-transform group-hover:rotate-6 group-hover:scale-105">
-        <svg
-          viewBox="0 0 24 24"
-          className="size-5 text-white"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <path d="M4 16c3-6 5-6 8 0s5 6 8 0" />
-          <path d="M4 9c3-6 5-6 8 0s5 6 8 0" opacity=".55" />
-        </svg>
+      <span
+        className={cn(
+          'relative flex shrink-0 items-center justify-center overflow-hidden bg-white shadow-md shadow-cyan-500/10 ring-1 ring-black/10 transition-transform group-hover:scale-105 group-hover:rotate-3 dark:ring-white/20',
+          containerClasses,
+        )}
+      >
+        <Image
+          src="/brand/maverick-pwa-192.png"
+          alt="Maverick Logo"
+          width={iconDimensions}
+          height={iconDimensions}
+          className="size-full object-contain"
+          priority
+        />
       </span>
-      <span className="text-lg">
-        Mehwar<span className="brand-text">Flow</span>
-      </span>
+      <div className="flex flex-col leading-tight">
+        <span className={cn('font-bold tracking-tight', size === 'lg' ? 'text-xl' : 'text-lg')}>
+          Mehwar<span className="brand-text">Flow</span>
+        </span>
+        {subtitle && (
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+            {subtitle}
+          </span>
+        )}
+      </div>
     </Link>
   );
 }

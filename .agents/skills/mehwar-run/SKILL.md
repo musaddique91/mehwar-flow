@@ -71,7 +71,7 @@ PORT=4000
 JWT_ACCESS_SECRET=aiD+U8PQXVigrNU+95fha/fO9N3O492TwKsSXoPifvS5CJH3Quk0ehNkKu5fW8ad
 MASTER_KEYS=1:Z9tOVHNXQCyOHpE1w9VozfJy48X+4nsjEnvRr3WtQKA=
 MASTER_KEY_CURRENT_VERSION=1
-WEB_ORIGIN=http://localhost:3000
+WEB_ORIGIN=http://localhost:3000,https://localhost:3000
 WEB_PORT=3000
 COOKIE_SECURE=false
 API_INTERNAL_URL=http://localhost:4000
@@ -91,7 +91,7 @@ export $(grep -v '^#' .env | xargs) && pnpm --filter @mehwar/api dev
 # 3. Launch Worker (BullMQ background processing)
 export $(grep -v '^#' .env | xargs) && pnpm --filter @mehwar/worker dev
 
-# 4. Launch Web Frontend (Next.js on :3000)
+# 4. Launch Web Frontend (Dual HTTP/HTTPS on :3000)
 export $(grep -v '^#' .env | xargs) && pnpm --filter @mehwar/web dev
 ```
 
@@ -99,6 +99,8 @@ export $(grep -v '^#' .env | xargs) && pnpm --filter @mehwar/web dev
 
 Verify server endpoints:
 - API Health: `curl -i http://localhost:4000/health`
-- Web App: `curl -i http://localhost:3000`
+- Web App (HTTP): `curl -i http://localhost:3000`
+- Web App (HTTPS): `curl -k -i https://localhost:3000`
 - User Login Test (`musajs91@gmail.com` / `Redhat7676`):
   `curl -i -X POST http://localhost:3000/api/auth/login -H "Content-Type: application/json" -d '{"email":"musajs91@gmail.com","password":"Redhat7676"}'`
+

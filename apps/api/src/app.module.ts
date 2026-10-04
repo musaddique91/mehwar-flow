@@ -24,6 +24,8 @@ import { PostsService } from './posts/posts.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersController } from './users/users.controller';
 import { VaultModule } from './vault/vault.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { CustomersModule } from './customers/customers.module';
 
 @Module({})
 class ConfigHolder {}
@@ -45,6 +47,8 @@ export class AppModule {
         InfraModule,
         VaultModule,
         AuthModule,
+        WhatsAppModule,
+        CustomersModule,
       ],
       controllers: [
         HealthController,

@@ -10,6 +10,7 @@ import {
   Copy,
   Cpu,
   CreditCard,
+  Database,
   Download,
   ExternalLink,
   Eye,
@@ -19,7 +20,10 @@ import {
   Key,
   KeyRound,
   Lock,
+  MessageSquare,
+  Phone,
   Plug,
+  QrCode,
   RefreshCw,
   Search,
   Server,
@@ -29,6 +33,7 @@ import {
   Sparkles,
   Terminal,
   Trash2,
+  Unplug,
   User,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -41,9 +46,10 @@ import {
   type ChannelDto,
   type Platform,
   type UserDto,
+  type WhatsAppStatusDto,
 } from '@mehwar/shared';
 import { FadeIn, Stagger, StaggerItem } from '@/components/motion';
-import { Avatar, Button, Card, Input, Modal, Switch } from '@/components/ui';
+import { Avatar, Button, Card, Input, Modal, Switch, Wordmark } from '@/components/ui';
 import { api, ApiError, downloadFile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
@@ -51,215 +57,7 @@ import { invalidate, useApi } from '@/lib/hooks';
 import { formatBytes } from '@/lib/media';
 import { PlatformIcon, PLATFORM_BRAND } from '@/lib/platforms';
 
-const TIME_ZONES: string[] =
-  typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : ['UTC'];
 
-function TimeZonePicker({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
-  const [query, setQuery] = useState('');
-  const options = useMemo(() => {
-    // The selected zone always comes first so it's visible without scrolling.
-    const all = [value, ...TIME_ZONES.filter((tz) => tz !== value)];
-    const q = query.trim().toLowerCase().replace(/\s+/g, '_');
-    return (q ? all.filter((tz) => tz.toLowerCase().includes(q)) : all).slice(0, 60);
-  }, [query, value]);
-
-  return (
-    <div className="space-y-2">
-      <span className="text-sm font-medium text-muted">Time zone</span>
-      <div className="flex h-11 items-center gap-2 rounded-2xl border border-line bg-elevated/60 px-3 focus-within:ring-4 focus-within:ring-[var(--ring)]">
-        <Search className="size-4 text-muted" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Search… (current: ${value})`}
-          className="w-full bg-transparent text-sm outline-none"
-          aria-label="Search time zones"
-        />
-      </div>
-      <div className="no-scrollbar max-h-52 space-y-0.5 overflow-y-auto rounded-2xl border border-line p-1.5">
-        {options.map((tz) => (
-          <button
-            key={tz}
-            type="button"
-            onClick={() => onChange(tz)}
-            className={cn(
-              'relative flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm',
-              tz === value ? 'font-semibold text-fg' : 'text-muted hover:bg-line hover:text-fg',
-            )}
-          >
-            {tz === value && (
-              <motion.span layoutId="tz-active" className="absolute inset-0 rounded-xl bg-line" />
-            )}
-            <span className="relative">{tz.replace(/_/g, ' ')}</span>
-          </button>
-        ))}
-        {options.length === 0 && (
-          <p className="px-3 py-4 text-center text-sm text-muted">No match</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ProfileSection({ user }: { user: UserDto }) {
-  const { setUser } = useAuth();
-  const [name, setName] = useState(user.name);
-  const [timezone, setTimezone] = useState(user.timezone);
-  const [xPremium, setXPremium] = useState(user.xPremium);
-  const [brandVoice, setBrandVoice] = useState(user.brandVoice ?? '');
-  const [saving, setSaving] = useState(false);
-  const dirty =
-    name !== user.name ||
-    timezone !== user.timezone ||
-    xPremium !== user.xPremium ||
-    brandVoice !== (user.brandVoice ?? '');
-
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const updated = await api<UserDto>('/me', {
-        method: 'PATCH',
-        json: { name, timezone, xPremium, brandVoice: brandVoice.trim() || null },
-      });
-      setUser(updated);
-      toast.success('Profile saved');
-    } catch (err) {
-      toast.error('Could not save', {
-        description: err instanceof Error ? err.message : undefined,
-      });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card className="bg-card-strong p-6">
-      <form onSubmit={onSubmit} className="space-y-5">
-        <div className="flex items-center gap-4">
-          <Avatar name={name || user.name} size={64} />
-          <div>
-            <h2 className="text-lg font-bold">Profile</h2>
-            <p className="text-sm text-muted">{user.email}</p>
-          </div>
-        </div>
-        <Input
-          label="Display name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          icon={<User className="size-4" />}
-        />
-        <TimeZonePicker value={timezone} onChange={setTimezone} />
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-line p-4">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-fg text-[var(--bg)]">
-              <PlatformIcon platform="x" className="size-4" />
-            </span>
-            <div>
-              <p className="text-sm font-semibold">X Premium</p>
-              <p className="text-xs text-muted">Allow posts up to 25,000 characters on X</p>
-            </div>
-          </div>
-          <Switch checked={xPremium} onChange={setXPremium} label="X Premium" />
-        </div>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-muted">Brand voice (for the AI assistant)</span>
-          <textarea
-            value={brandVoice}
-            onChange={(e) => setBrandVoice(e.target.value)}
-            maxLength={1000}
-            rows={3}
-            placeholder="e.g. Warm and witty, speaks to busy parents, never uses slang, signs off with 💛"
-            className="w-full rounded-2xl border border-line bg-elevated/60 px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[var(--ring)]"
-          />
-        </label>
-        <div className="flex justify-end">
-          <Button type="submit" loading={saving} disabled={!dirty}>
-            Save changes
-          </Button>
-        </div>
-      </form>
-    </Card>
-  );
-}
-
-function PasswordSection() {
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const { logout } = useAuth();
-
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErrors({});
-    try {
-      await api('/me/password', {
-        method: 'POST',
-        json: { currentPassword: current, newPassword: next },
-      });
-      toast.success('Password changed', {
-        description: 'Please log in again with your new password.',
-      });
-      await logout();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401)
-        setErrors({ current: 'Current password is incorrect' });
-      else if (err instanceof ApiError && err.errors) {
-        setErrors({
-          next: err.errors.find((x) => x.path === 'newPassword')?.message ?? err.message,
-        });
-      } else toast.error('Could not change password');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card className="bg-card-strong p-6">
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-500 dark:text-fuchsia-400">
-            <KeyRound className="size-5" />
-          </span>
-          <div>
-            <h2 className="text-lg font-bold">Password</h2>
-            <p className="text-xs text-muted">Changing it signs you out everywhere.</p>
-          </div>
-        </div>
-        <Input
-          label="Current password"
-          type="password"
-          autoComplete="current-password"
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-          icon={<Lock className="size-4" />}
-          error={errors.current}
-        />
-        <Input
-          label="New password"
-          type="password"
-          autoComplete="new-password"
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-          icon={<Lock className="size-4" />}
-          error={errors.next}
-        />
-        <div className="flex justify-end">
-          <Button
-            type="submit"
-            variant="secondary"
-            loading={busy}
-            disabled={!current || next.length < 10}
-          >
-            Update password
-          </Button>
-        </div>
-      </form>
-    </Card>
-  );
-}
 
 interface BillingOverview {
   billingEnabled: boolean;
@@ -424,77 +222,7 @@ function BillingSection() {
   );
 }
 
-function PrivacySection() {
-  const { logout } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const remove = async () => {
-    setBusy(true);
-    try {
-      await api('/me', { method: 'DELETE', json: { password } });
-      toast('Your account was deleted. Goodbye 👋');
-      await logout();
-    } catch (err) {
-      toast.error((err as ApiError).message);
-      setBusy(false);
-    }
-  };
-  return (
-    <Card className="space-y-4 bg-card-strong p-6">
-      <div className="flex items-center gap-3">
-        <span className="flex size-10 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-500 dark:text-fuchsia-400">
-          <ShieldCheck className="size-5" />
-        </span>
-        <div>
-          <h2 className="text-lg font-bold">Your data</h2>
-          <p className="text-xs text-muted">
-            Download everything we store about you, or delete your account.
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() =>
-            downloadFile('/me/export', 'mehwar-export.json').catch(() =>
-              toast.error('Export failed'),
-            )
-          }
-        >
-          <Download className="size-4" /> Export my data
-        </Button>
-        <Button variant="danger" size="sm" onClick={() => setOpen(true)}>
-          <Trash2 className="size-4" /> Delete account
-        </Button>
-      </div>
-      <Modal open={open} onClose={() => setOpen(false)} title="Delete your account?">
-        <div className="space-y-4">
-          <p className="text-sm text-muted">
-            This disconnects every channel, cancels scheduled posts and permanently deletes your
-            posts, media and settings. Posts already published stay on the networks.
-          </p>
-          <Input
-            label="Confirm with your password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            icon={<Lock className="size-4" />}
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={remove} loading={busy} disabled={!password}>
-              Delete forever
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </Card>
-  );
-}
+
 
 function AiSettingsSection() {
   const { data: initialSettings, setData } = useApi<{
@@ -976,7 +704,7 @@ function AiSettingsSection() {
   );
 }
 
-type SettingsTab = 'networks' | 'ai' | 'profile' | 'security' | 'billing' | 'privacy';
+type SettingsTab = 'networks' | 'whatsapp' | 'ai' | 'billing';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: any; description: string }[] = [
   {
@@ -986,34 +714,22 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: any; description: s
     description: 'Manage connected social media channels and add new networks',
   },
   {
+    id: 'whatsapp',
+    label: 'WhatsApp',
+    icon: MessageSquare,
+    description: 'Connect WhatsApp session, pair QR code, and manage customer dispatch attributes',
+  },
+  {
     id: 'ai',
     label: 'AI & LLM Setup',
     icon: Sparkles,
     description: 'Configure your LLM provider, API key, endpoint, and default model',
   },
   {
-    id: 'profile',
-    label: 'Profile & Brand Voice',
-    icon: User,
-    description: 'Personal details, timezone and AI brand voice preferences',
-  },
-  {
-    id: 'security',
-    label: 'Security & Password',
-    icon: Lock,
-    description: 'Manage account security and update your password',
-  },
-  {
     id: 'billing',
     label: 'Plan & Billing',
     icon: CreditCard,
     description: 'Subscription plans, resource limits and usage metrics',
-  },
-  {
-    id: 'privacy',
-    label: 'Privacy & Data',
-    icon: ShieldCheck,
-    description: 'Data export options and account management',
   },
 ];
 
@@ -1207,10 +923,18 @@ function NetworkSetupModal({
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
 
-  const redirectUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}${guide.redirectPath}`
-      : `http://localhost:3000${guide.redirectPath}`;
+  const requiresHttps =
+    platform === 'threads' ||
+    platform === 'facebook' ||
+    platform === 'instagram' ||
+    platform === 'tiktok';
+
+  const [useHttps, setUseHttps] = useState(
+    requiresHttps || (typeof window !== 'undefined' && window.location.protocol === 'https:'),
+  );
+
+  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
+  const redirectUrl = `${useHttps ? 'https:' : 'http:'}//${host}${guide.redirectPath}`;
 
   const envSnippet = guide.envVars
     .map((v) => (v.includes('=') ? v : `${v}=your_${v.toLowerCase()}_here`))
@@ -1286,7 +1010,31 @@ function NetworkSetupModal({
         {/* Redirect URI Box */}
         <div className="space-y-2 rounded-2xl border border-line bg-elevated/60 p-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-fg">Authorized Redirect URI</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-fg">Authorized Redirect URI</span>
+              <div className="flex items-center rounded-lg bg-card p-0.5 border border-line text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setUseHttps(false)}
+                  className={cn(
+                    'px-2 py-0.5 rounded-md font-medium transition cursor-pointer',
+                    !useHttps ? 'bg-primary text-white' : 'text-muted hover:text-fg',
+                  )}
+                >
+                  HTTP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseHttps(true)}
+                  className={cn(
+                    'px-2 py-0.5 rounded-md font-medium transition cursor-pointer',
+                    useHttps ? 'bg-primary text-white' : 'text-muted hover:text-fg',
+                  )}
+                >
+                  HTTPS
+                </button>
+              </div>
+            </div>
             <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5" onClick={copyRedirectUrl}>
               {copiedUrl ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
               {copiedUrl ? 'Copied' : 'Copy URI'}
@@ -1296,7 +1044,9 @@ function NetworkSetupModal({
             {redirectUrl}
           </code>
           <p className="text-[11px] text-muted">
-            Add this exact URL to your app's OAuth 2.0 Redirect URLs list in the developer portal.
+            {requiresHttps
+              ? '⚠️ Threads and Meta require HTTPS redirect URLs. Local development supports https://localhost:3000.'
+              : "Add this exact URL to your app's OAuth 2.0 Redirect URLs list in the developer portal."}
           </p>
         </div>
 
@@ -1638,6 +1388,272 @@ function NetworksSection() {
   );
 }
 
+function WhatsAppSection() {
+  const { data: status, setData } = useApi<WhatsAppStatusDto>('/whatsapp/status', ['whatsapp']);
+  const [loading, setLoading] = useState(false);
+  const [polling, setPolling] = useState(false);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      const res = await api<WhatsAppStatusDto>('/whatsapp/connect', { method: 'POST' });
+      setData(res);
+      setPolling(true);
+      toast.info('QR Code generated. Scan with WhatsApp on your mobile phone.');
+    } catch (err) {
+      toast.error('Could not initiate WhatsApp connection', {
+        description: (err as ApiError).message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect this WhatsApp session?')) return;
+    setLoading(true);
+    try {
+      await api('/whatsapp/disconnect', { method: 'POST' });
+      setData({ status: 'DISCONNECTED', savedInDb: true });
+      invalidate('whatsapp');
+      setPolling(false);
+      toast.success('WhatsApp disconnected successfully');
+    } catch {
+      toast.error('Could not disconnect WhatsApp');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!polling || status?.status === 'CONNECTED') return;
+
+    const timer = setInterval(async () => {
+      try {
+        const s = await api<WhatsAppStatusDto>('/whatsapp/status');
+        setData(s);
+        if (s.status === 'CONNECTED') {
+          setPolling(false);
+          invalidate('whatsapp');
+          toast.success('WhatsApp connected and saved in database! 🎉');
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 2500);
+
+    return () => clearInterval(timer);
+  }, [polling, status?.status, setData]);
+
+  const isConnected = status?.status === 'CONNECTED';
+  const isScanning = status?.status === 'SCAN_QR_CODE' && Boolean(status.qrCodeDataUrl);
+
+  return (
+    <div className="space-y-6">
+      {/* Header card */}
+      <Card className="p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500 ring-8 ring-emerald-500/10 shrink-0">
+              <MessageSquare className="size-7" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-xl font-bold tracking-tight">WhatsApp Messaging</h2>
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                    isConnected
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : isScanning
+                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        : 'bg-card text-muted border border-line',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'size-1.5 rounded-full',
+                      isConnected ? 'bg-emerald-400 animate-pulse' : isScanning ? 'bg-amber-400 animate-ping' : 'bg-muted',
+                    )}
+                  />
+                  {isConnected ? 'Connected' : isScanning ? 'Awaiting Scan' : 'Disconnected'}
+                </span>
+              </div>
+              <p className="text-xs text-muted mt-1">
+                Pair WhatsApp Web to dispatch automated video and social link updates to your customers and groups.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {isConnected ? (
+              <Button variant="danger" size="sm" onClick={handleDisconnect} loading={loading}>
+                <Unplug className="size-4" /> Disconnect
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleConnect}
+                loading={loading}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white"
+              >
+                <QrCode className="size-4" /> {isScanning ? 'Regenerate QR' : 'Connect WhatsApp'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* Main Grid: Status & QR + Database Persistence */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Left Column: Interactive QR / Pairing */}
+        <Card className="p-6 flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-fg flex items-center gap-2">
+              <QrCode className="size-4 text-emerald-500" /> WhatsApp Web Pairing
+            </h3>
+            <p className="text-xs text-muted mt-1">
+              Pair your phone via WhatsApp Web. Session credentials and connection attributes are persisted in the database.
+            </p>
+          </div>
+
+          <div className="my-6 flex flex-col items-center justify-center min-h-[240px]">
+            {isConnected ? (
+              <div className="text-center space-y-3">
+                <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500 ring-8 ring-emerald-500/10">
+                  <CheckCircle2 className="size-8" />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-fg">Session Active & Ready</p>
+                  <p className="text-xs text-muted">
+                    {status.phone ? `+${status.phone}` : 'Paired via WhatsApp Web'}
+                    {status.pushName ? ` (${status.pushName})` : ''}
+                  </p>
+                </div>
+              </div>
+            ) : isScanning ? (
+              <div className="text-center space-y-3">
+                <div className="inline-block p-3 rounded-2xl bg-white shadow-xl ring-4 ring-emerald-500/20">
+                  <img src={status.qrCodeDataUrl!} alt="WhatsApp QR Code" className="size-48 rounded-lg" />
+                </div>
+                <div className="flex items-center justify-center gap-2 text-xs text-muted">
+                  <RefreshCw className="size-3.5 animate-spin text-emerald-500" />
+                  <span>Waiting for mobile scan...</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center space-y-3 py-6">
+                <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-card border border-line text-muted">
+                  <Phone className="size-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-fg">No Active WhatsApp Session</p>
+                  <p className="text-xs text-muted max-w-xs mx-auto mt-1">
+                    Click the button below to generate a QR code and link your WhatsApp account.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleConnect}
+                  loading={loading}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white"
+                >
+                  <QrCode className="size-4" /> Generate QR Code
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-line bg-card-strong/40 p-4 text-xs space-y-2">
+            <p className="font-semibold text-fg">📱 How to link:</p>
+            <ol className="list-decimal list-inside space-y-1 text-muted">
+              <li>Open WhatsApp on your mobile phone</li>
+              <li>Tap <strong>Settings</strong> or <strong>Menu (⋮)</strong> &gt; <strong>Linked Devices</strong></li>
+              <li>Tap <strong>Link a Device</strong> and point your camera at the QR code</li>
+            </ol>
+          </div>
+        </Card>
+
+        {/* Right Column: Database Stored Attributes */}
+        <Card className="p-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-fg flex items-center gap-2">
+                <Database className="size-4 text-primary" /> Stored Database Attributes
+              </h3>
+              <span className="text-[11px] font-mono text-muted bg-card px-2 py-0.5 rounded-full border border-line">
+                table: whatsapp_sessions
+              </span>
+            </div>
+            <p className="text-xs text-muted mt-1">
+              Attributes safely isolated per tenant organization with PostgreSQL Row-Level Security.
+            </p>
+          </div>
+
+          <div className="my-4 divide-y divide-line rounded-2xl border border-line bg-card/60">
+            <div className="flex items-center justify-between p-3 text-xs">
+              <span className="text-muted font-medium">Session Status</span>
+              <span
+                className={cn(
+                  'font-semibold font-mono px-2 py-0.5 rounded-full text-[11px]',
+                  isConnected
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : isScanning
+                      ? 'bg-amber-500/15 text-amber-400'
+                      : 'bg-card text-muted',
+                )}
+              >
+                {status?.status ?? 'DISCONNECTED'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 text-xs">
+              <span className="text-muted font-medium">Paired Phone Number</span>
+              <span className="font-mono font-semibold text-fg">
+                {status?.phone ? `+${status.phone}` : '—'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 text-xs">
+              <span className="text-muted font-medium">Push Name / Display</span>
+              <span className="font-medium text-fg">{status?.pushName ?? '—'}</span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 text-xs">
+              <span className="text-muted font-medium">Engine / Platform</span>
+              <span className="font-mono text-fg">{status?.platform ?? 'WhatsApp Web (Chrome)'}</span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 text-xs">
+              <span className="text-muted font-medium">Connected At</span>
+              <span className="text-muted">
+                {status?.connectedAt ? new Date(status.connectedAt).toLocaleString() : 'Not connected'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 text-xs">
+              <span className="text-muted font-medium">Tenant Isolation</span>
+              <span className="text-emerald-400 font-mono text-[11px]">RLS Enforced (app_rls_allows)</span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted space-y-1">
+            <p className="font-semibold text-fg flex items-center gap-1.5">
+              <ShieldCheck className="size-4 text-primary" /> Automatic Fallback Support
+            </p>
+            <p>
+              If WhatsApp Web is unlinked, customer shares generate customized{' '}
+              <code className="text-primary font-mono">web.whatsapp.com/send</code> fallback links with your uploaded video URLs prefilled.
+            </p>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<SettingsTab>('networks');
@@ -1667,7 +1683,7 @@ export default function SettingsPage() {
             <Settings className="size-7 text-primary" /> Settings
           </h1>
           <p className="text-xs text-muted">
-            Manage connected social networks, user profile preferences, billing, and account security.
+            Manage connected social networks, WhatsApp messaging, billing, and account preferences.
           </p>
         </div>
       </FadeIn>
@@ -1701,11 +1717,24 @@ export default function SettingsPage() {
       {/* Active Tab Content Section */}
       <FadeIn delay={0.1}>
         {activeTab === 'networks' && <NetworksSection />}
+        {activeTab === 'whatsapp' && <WhatsAppSection />}
         {activeTab === 'ai' && <AiSettingsSection />}
-        {activeTab === 'profile' && <ProfileSection user={user} />}
-        {activeTab === 'security' && <PasswordSection />}
         {activeTab === 'billing' && <BillingSection />}
-        {activeTab === 'privacy' && <PrivacySection />}
+      </FadeIn>
+
+      {/* Brand & System Information Footer */}
+      <FadeIn delay={0.15}>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-3xl border border-line bg-card/40 px-6 py-4 text-xs text-muted backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-fg">Mehwar Flow</span>
+            <span>•</span>
+            <span>Enterprise Multi-Channel Suite</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>Powered by</span>
+            <Wordmark height={18} />
+          </div>
+        </div>
       </FadeIn>
     </div>
   );

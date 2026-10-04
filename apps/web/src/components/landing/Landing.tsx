@@ -24,6 +24,7 @@ import {
   StaggerItem,
 } from '@/components/motion';
 import { Logo } from '@/components/ui/Logo';
+import { Wordmark } from '@/components/ui/Wordmark';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { PlatformIcon } from '@/lib/platforms';
 
@@ -355,9 +356,16 @@ export function Landing() {
       <Features />
       <HowItWorks />
       <FinalCta />
-      <footer className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 border-t border-line px-4 py-8 text-sm text-muted sm:flex-row">
-        <Logo />
-        <span>© {new Date().getFullYear()} Mehwar Flow</span>
+      <footer className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 border-t border-line px-4 py-8 text-sm text-muted sm:flex-row">
+        <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <Logo />
+          <span className="hidden text-line sm:inline">•</span>
+          <span className="text-xs">© {new Date().getFullYear()} Mehwar Flow</span>
+        </div>
+        <div className="flex items-center gap-2.5 text-xs">
+          <span className="text-muted">A product of</span>
+          <Wordmark height={22} />
+        </div>
       </footer>
     </div>
   );

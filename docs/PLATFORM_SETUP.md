@@ -19,16 +19,15 @@ Every network redirects back to:
 <WEB_ORIGIN>/api/channels/callback/<platform>
 ```
 
-On a normal local install that is `http://localhost:3000/api/channels/callback/x`. Many networks
-refuse `http://` or `localhost` callbacks (Meta, Threads and TikTok all require HTTPS). For those,
-give the app a public HTTPS address, for example with a Cloudflare tunnel:
-
-```bash
-cloudflared tunnel --url http://localhost:3000     # prints https://<random>.trycloudflare.com
-```
-
-Then set `WEB_ORIGIN=https://<random>.trycloudflare.com` and `COOKIE_SECURE=true` in `.env`, and
-restart the stack.
+On a normal local install, both `http://localhost:3000` and `https://localhost:3000` work simultaneously.
+Many networks refuse `http://` or plain `localhost` callbacks (Meta, Threads and TikTok all require HTTPS).
+For those, Mehwar Flow serves both HTTP and HTTPS on port 3000:
+- You can use `https://localhost:3000/api/channels/callback/threads` directly in the developer portal!
+- Or, if you need a publicly accessible tunnel from the internet, you can use a Cloudflare tunnel:
+  ```bash
+  cloudflared tunnel --url http://localhost:3000     # prints https://<random>.trycloudflare.com
+  ```
+Mehwar Flow automatically handles CORS and cookies dynamically for both HTTP and HTTPS origins.
 
 ### 2. Public media URL
 

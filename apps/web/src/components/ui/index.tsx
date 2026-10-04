@@ -244,7 +244,7 @@ export function Modal({
             aria-modal="true"
             aria-label={title}
             className={cn(
-              'glass w-full rounded-3xl bg-card-strong p-6 shadow-2xl max-h-[88vh] flex flex-col my-auto border border-line',
+              'w-full rounded-3xl bg-white dark:bg-card-strong p-6 shadow-2xl max-h-[88vh] flex flex-col my-auto border border-line text-fg',
               maxWidth,
             )}
             initial={{ y: 30, opacity: 0, scale: 0.96 }}
@@ -262,7 +262,7 @@ export function Modal({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+            <div className="flex-1 overflow-y-auto min-h-0 pr-1 text-fg">
               {children}
             </div>
           </motion.div>
@@ -277,4 +277,6 @@ export function Modal({
 
 export * from './testimonials-columns-1';
 export * from './demo';
+export * from './Logo';
+export * from './Wordmark';
 
