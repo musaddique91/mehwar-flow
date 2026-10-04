@@ -34,7 +34,7 @@ cd "$(dirname "$0")/.."
 docker info >/dev/null 2>&1 || { echo "Docker is not running (start Docker Desktop)." >&2; exit 1; }
 
 TAG="mehwar-flow-app:$(git rev-parse --short HEAD)"
-if [ -n "$(git status --porcelain)" ]; then
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   TAG="$TAG-dirty-$(date +%Y%m%d-%H%M%S)"
   echo "note: uncommitted changes are included in this build"
 fi
@@ -64,7 +64,8 @@ sudo sed -i "s|^APP_IMAGE_TAG=.*|APP_IMAGE_TAG=\$TAG|" .env
 dc() { sudo docker compose -p $PROJECT "\$@"; }
 
 echo "--> migrations"
-dc run --rm --no-deps mehwar-flow-migrate
+# -T and </dev/null: `run` must not read this script from stdin, or the steps below never run.
+dc run --rm -T --no-deps mehwar-flow-migrate </dev/null
 
 echo "--> recreating \$*"
 dc up -d --no-deps "\$@"
