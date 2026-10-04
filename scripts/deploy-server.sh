@@ -45,11 +45,21 @@ docker buildx build --platform linux/amd64 -t "$TAG" --load .
 echo "==> Uploading image to $HOST"
 docker save "$TAG" | gzip -1 | ssh -o BatchMode=yes "$HOST" 'gunzip | sudo docker load'
 
+echo "==> Syncing compose file"
+sed 's/__BACKEND_CONTAINER_NAME__/mehwar-flow-api/g; s/__FRONTEND_CONTAINER_NAME__/mehwar-flow-web/g' \
+  docker-compose-jenkins.yaml | ssh -o BatchMode=yes "$HOST" "cat > /tmp/mehwar-flow-compose.yml"
+
 echo "==> Deploying: ${SERVICES[*]}"
 ssh -o BatchMode=yes "$HOST" bash -s -- "$TAG" "${SERVICES[@]}" <<REMOTE
 set -euo pipefail
 TAG="\$1"; shift
 cd $DIR
+if ! sudo cmp -s /tmp/mehwar-flow-compose.yml docker-compose.yml; then
+  sudo cp docker-compose.yml "docker-compose.yml.bak-\$(date +%Y%m%d-%H%M%S)"
+  sudo mv /tmp/mehwar-flow-compose.yml docker-compose.yml
+  echo "--> compose file updated (previous one backed up)"
+fi
+sudo rm -f /tmp/mehwar-flow-compose.yml
 sudo sed -i "s|^APP_IMAGE_TAG=.*|APP_IMAGE_TAG=\$TAG|" .env
 dc() { sudo docker compose -p $PROJECT "\$@"; }
 
