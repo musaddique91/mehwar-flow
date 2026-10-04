@@ -10,6 +10,18 @@ coverage/
 *.tsbuildinfo
 next-env.d.ts
 certs/
+certificates/
+
 # whatsapp-web.js session (a live WhatsApp login) and its page cache
+**/.wwebjs_auth/
+**/.wwebjs_cache/
 .wwebjs_auth/
 .wwebjs_cache/
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
