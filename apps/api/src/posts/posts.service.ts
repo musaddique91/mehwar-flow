@@ -65,7 +65,10 @@ export class PostsService {
     const posts = await this.db(orgId).post.findMany({
       where,
       include: postInclude,
-      orderBy: q.from || q.to ? { scheduledAt: 'asc' } : { updatedAt: 'desc' },
+      orderBy:
+        q.from || q.to || q.status === 'SCHEDULED'
+          ? { scheduledAt: 'asc' }
+          : { updatedAt: 'desc' },
       take: Math.min(q.limit ?? 100, 500),
     });
     return Promise.all(posts.map((p) => toPostDto(p, this.storage)));
@@ -192,9 +195,17 @@ export class PostsService {
     if (!EDITABLE.includes(post.status))
       throw new BadRequestException('This post is already being published');
     const pendingTargets = post.targets.filter((t) => t.status !== 'PUBLISHED');
-    if (pendingTargets.length === 0) throw new BadRequestException('Choose at least one channel');
-    if (!post.text.trim() && post.media.length === 0)
-      throw new BadRequestException('The post is empty');
+    const db = this.db(orgId);
+
+    // Auto-heal WhatsApp channel status if WhatsApp session is currently connected
+    const waTarget = pendingTargets.find((t) => t.channel.platform === 'whatsapp');
+    if (waTarget && waTarget.channel.status !== 'ACTIVE') {
+      const waSession = await db.whatsappSession.findUnique({ where: { organizationId: orgId } });
+      if (waSession?.status === 'CONNECTED') {
+        await db.channel.update({ where: { id: waTarget.channel.id }, data: { status: 'ACTIVE' } });
+        waTarget.channel.status = 'ACTIVE';
+      }
+    }
 
     const issues = validatePost({ ...post, targets: pendingTargets }, extended).filter(
       (i) => i.severity === 'error',
@@ -205,7 +216,6 @@ export class PostsService {
         issues,
       });
 
-    const db = this.db(orgId);
     await db.post.update({
       where: { id },
       data: { status: 'SCHEDULED', scheduledAt: runAt, timezone },

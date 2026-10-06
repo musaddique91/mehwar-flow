@@ -495,7 +495,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
 
                 {/* Header Action Buttons */}
                 <div className="flex items-center gap-2 shrink-0">
-                  <Link href={`/settings?connect=${platform}`}>
+                  <Link href={platform === 'whatsapp' ? '/settings?tab=whatsapp&scan=true' : `/settings?connect=${platform}`}>
                     <Button variant="secondary" size="sm">
                       <RefreshCw className="size-3.5" /> Reconnect
                     </Button>
@@ -516,7 +516,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                    <div className="flex items-center justify-center gap-1.5 text-xs text-muted mb-1">
                     <Users className="size-4 text-primary" />
                     <span className="font-semibold">
-                      {platform === 'youtube' ? 'Subscribers' : 'Followers'}
+                      {platform === 'youtube' ? 'Subscribers' : platform === 'whatsapp' ? 'Contacts / Groups' : 'Followers'}
                     </span>
                   </div>
                   <p className="text-xl font-black">{formatNumber(data?.subscriberCount)}</p>
@@ -525,7 +525,13 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                   <div className="flex items-center justify-center gap-1.5 text-xs text-muted mb-1">
                     <Eye className="size-4 text-blue-500" />
                     <span className="font-semibold">
-                      {platform === 'youtube' || platform === 'tiktok' ? 'Total Views' : platform === 'x' ? 'Total Tweets' : 'Total Reach'}
+                      {platform === 'youtube' || platform === 'tiktok'
+                        ? 'Total Views'
+                        : platform === 'x'
+                          ? 'Total Tweets'
+                          : platform === 'whatsapp'
+                            ? 'Chats / Groups'
+                            : 'Total Reach'}
                     </span>
                   </div>
                   <p className="text-xl font-black">{formatNumber(data?.viewCount)}</p>
@@ -534,7 +540,13 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                   <div className="flex items-center justify-center gap-1.5 text-xs text-muted mb-1">
                     <Video className="size-4 text-emerald-500" />
                     <span className="font-semibold">
-                      {platform === 'youtube' || platform === 'tiktok' ? 'Videos' : platform === 'x' ? 'Recent Posts' : 'Total Posts'}
+                      {platform === 'youtube' || platform === 'tiktok'
+                        ? 'Videos'
+                        : platform === 'x'
+                          ? 'Recent Posts'
+                          : platform === 'whatsapp'
+                            ? 'Messages Sent'
+                            : 'Total Posts'}
                     </span>
                   </div>
                   <p className="text-xl font-black">{formatNumber(data?.videoCount)}</p>
@@ -557,7 +569,9 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                           ? `X / Twitter Posts (${filteredVideos.length})`
                           : platform === 'linkedin'
                             ? `LinkedIn Posts (${filteredVideos.length})`
-                            : `Channel Posts (${filteredVideos.length})`}
+                            : platform === 'whatsapp'
+                              ? `WhatsApp Dispatched Messages (${filteredVideos.length})`
+                              : `Channel Posts (${filteredVideos.length})`}
                 </h2>
                 {platform === 'youtube' && (
                   <div className="flex gap-1 rounded-xl bg-elevated p-1 text-xs">

@@ -2,7 +2,8 @@
 
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Clock, FileUp, Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState, type DragEvent } from 'react';
+import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { utcToZonedLocal, zonedLocalToUtc, type PostDto } from '@mehwar/shared';
 import { FadeIn } from '@/components/motion';
@@ -182,6 +183,8 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
 }
 
 export default function CalendarPage() {
+  const router = useRouter();
+  const isDraggingRef = useRef(false);
   const { user } = useAuth();
   const tz = user?.timezone ?? 'UTC';
   const today = utcToZonedLocal(new Date(), tz).slice(0, 10);
@@ -189,6 +192,19 @@ export default function CalendarPage() {
   const [anchor, setAnchor] = useState(today);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+
+  const handlePostClick = (p: PostDto) => {
+    if (isDraggingRef.current) return;
+    const isFuture =
+      p.status === 'SCHEDULED' ||
+      (p.scheduledAt && new Date(p.scheduledAt).getTime() > Date.now());
+
+    if (isFuture) {
+      router.push(`/schedules?postId=${p.id}#post-${p.id}`);
+    } else {
+      router.push(`/dashboard?postId=${p.id}#post-${p.id}`);
+    }
+  };
 
   const days = useMemo(() => {
     if (view === 'week') {
@@ -349,25 +365,37 @@ export default function CalendarPage() {
                       {Number(d.slice(8))}
                     </span>
                   </div>
-                  <div className="space-y-1">
+                    <div className="space-y-1">
                     {items.slice(0, view === 'week' ? 20 : 3).map((p) => {
                       const draggable = p.status === 'SCHEDULED';
+                      const isFuture =
+                        p.status === 'SCHEDULED' ||
+                        (p.scheduledAt && new Date(p.scheduledAt).getTime() > Date.now());
+
                       return (
                         <div
                           key={p.id}
                           draggable={draggable}
-                          onDragStart={(e) =>
+                          onDragStart={(e) => {
+                            isDraggingRef.current = true;
                             e.dataTransfer.setData(
                               'application/json',
                               JSON.stringify({ id: p.id, local: p.local }),
-                            )
-                          }
+                            );
+                          }}
+                          onDragEnd={() => {
+                            setTimeout(() => {
+                              isDraggingRef.current = false;
+                            }, 150);
+                          }}
+                          onClick={() => handlePostClick(p)}
                           className={cn(
-                            'rounded-lg border px-1.5 py-1 text-[11px] leading-tight transition-transform hover:scale-[1.03]',
+                            'rounded-lg border px-1.5 py-1 text-[11px] leading-tight transition-all duration-150',
+                            'cursor-pointer hover:scale-[1.03] hover:shadow-md hover:ring-2 hover:ring-primary/50',
                             STATUS_COLOR[p.status],
                             draggable && 'cursor-grab active:cursor-grabbing',
                           )}
-                          title={p.text}
+                          title={`${p.text || 'Media post'} • Click to view in ${isFuture ? 'My Schedules' : 'Home'}`}
                         >
                           <div className="flex items-center gap-1 font-semibold">
                             {p.local.slice(11, 16)}
@@ -382,7 +410,16 @@ export default function CalendarPage() {
                       );
                     })}
                     {items.length > 3 && view === 'month' && (
-                      <p className="px-1 text-[10px] text-muted">+{items.length - 3} more</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAnchor(d);
+                          setView('week');
+                        }}
+                        className="w-full text-left px-1 text-[10px] text-muted hover:text-primary transition font-semibold"
+                      >
+                        +{items.length - 3} more
+                      </button>
                     )}
                   </div>
                 </div>

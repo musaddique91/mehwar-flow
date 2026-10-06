@@ -23,6 +23,9 @@ export const targetOptionsSchema = z
     threadBlocks: z.array(z.string()).max(25).optional(),
     /** Instagram */
     igMediaType: z.enum(['FEED', 'REELS', 'STORIES']).optional(),
+    /** WhatsApp */
+    whatsappPostType: z.enum(['MESSAGE', 'STATUS']).optional(),
+    whatsappRecipient: z.string().max(50).optional(),
   })
   .strict();
 export type TargetOptions = z.infer<typeof targetOptionsSchema>;

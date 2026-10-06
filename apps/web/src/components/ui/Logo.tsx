@@ -36,7 +36,7 @@ export function Logo({
       >
         <Image
           src="/brand/maverick-pwa-192.png"
-          alt="Maverick Logo"
+          alt="Mehwar - Maverick Social Hub Logo"
           width={iconDimensions}
           height={iconDimensions}
           className="size-full object-contain"

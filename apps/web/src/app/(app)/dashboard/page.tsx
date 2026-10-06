@@ -4,7 +4,7 @@ import { AnimatePresence } from 'motion/react';
 import { CalendarClock, Link2, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import type { AnalyticsSummaryDto, ChannelDto, PostDto } from '@mehwar/shared';
 import { Composer } from '@/components/composer/Composer';
 import {
@@ -25,6 +25,7 @@ function DashboardContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const initialText = searchParams?.get('text') ?? undefined;
+  const targetPostId = searchParams?.get('postId');
   const [filter, setFilter] = useState<{ id: string; status?: string }>({ id: 'all' });
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [editing, setEditing] = useState<PostDto | null>(null);
@@ -35,6 +36,22 @@ function DashboardContent() {
   );
   const counts = useApi<PostDto[]>('/posts?limit=500&status=SCHEDULED,PUBLISHING', ['posts']);
   const summary = useApi<AnalyticsSummaryDto>('/analytics/summary?days=30', ['posts']);
+
+  // Auto-scroll and highlight target post if requested from calendar
+  useEffect(() => {
+    if (!targetPostId || !posts.data) return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`post-${targetPostId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary', 'shadow-xl');
+        setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-primary', 'shadow-xl');
+        }, 3500);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [targetPostId, posts.data]);
 
   if (!user) return null;
 

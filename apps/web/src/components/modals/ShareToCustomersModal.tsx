@@ -32,6 +32,7 @@ import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApi } from '@/lib/hooks';
 import { PlatformIcon, PLATFORM_BRAND } from '@/lib/platforms';
+import { CustomerMessagePreviewModal } from './CustomerMessagePreviewModal';
 
 export function ShareToCustomersModal({
   post,
@@ -49,6 +50,7 @@ export function ShareToCustomersModal({
   const [sendWhatsApp, setSendWhatsApp] = useState(true);
   const [customMessage, setCustomMessage] = useState('');
   const [previewTab, setPreviewTab] = useState<'email' | 'whatsapp'>('email');
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [lastResult, setLastResult] = useState<SharePostResultDto | null>(null);
 
@@ -246,6 +248,16 @@ export function ShareToCustomersModal({
               ))}
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setPreviewModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-elevated/90 px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line transition shadow-xs shrink-0 self-center"
+            title="Preview how message looks to customers"
+          >
+            <Eye className="size-3.5 text-primary" />
+            <span>Preview</span>
+          </button>
         </div>
 
         {/* Recipient Picker */}
@@ -462,10 +474,19 @@ export function ShareToCustomersModal({
         </div>
 
         {/* Custom Intro Note */}
-        <label className="block space-y-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted">
-            Personal Message / Note (optional)
-          </span>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Personal Message / Note (optional)
+            </span>
+            <button
+              type="button"
+              onClick={() => setPreviewModalOpen(true)}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+            >
+              <Eye className="size-3" /> Preview formatted message
+            </button>
+          </div>
           <textarea
             value={customMessage}
             onChange={(e) => setCustomMessage(e.target.value)}
@@ -473,14 +494,23 @@ export function ShareToCustomersModal({
             placeholder="e.g. Check out our brand new video, let us know your thoughts!"
             className="w-full rounded-2xl border border-line bg-elevated/60 px-3.5 py-2.5 text-xs text-fg outline-none focus:ring-4 focus:ring-[var(--ring)] resize-none"
           />
-        </label>
+        </div>
 
         {/* Live Preview Tabs */}
         <div className="space-y-2 rounded-2xl border border-line bg-elevated/40 p-3">
           <div className="flex items-center justify-between border-b border-line pb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
-              <Eye className="size-3.5" /> Content Preview
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
+                <Eye className="size-3.5" /> Content Preview
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewModalOpen(true)}
+                className="inline-flex items-center gap-1 rounded-lg border border-line bg-elevated px-2 py-0.5 text-[10px] font-bold text-primary hover:bg-line transition shadow-xs"
+              >
+                <span>Full Phone & Email View &rarr;</span>
+              </button>
+            </div>
             <div className="flex gap-1">
               <button
                 type="button"
@@ -604,10 +634,20 @@ export function ShareToCustomersModal({
         )}
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between pt-3 border-t border-line/60">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            {lastResult ? 'Done' : 'Cancel'}
-          </Button>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-line/60">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>
+              {lastResult ? 'Done' : 'Cancel'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setPreviewModalOpen(true)}
+              className="gap-2"
+            >
+              <Eye className="size-4 text-primary" /> Preview Message
+            </Button>
+          </div>
 
           <Button
             onClick={handleShare}
@@ -620,6 +660,21 @@ export function ShareToCustomersModal({
           </Button>
         </div>
       </div>
+
+      {/* Dedicated Full Customer Message Preview Modal */}
+      <CustomerMessagePreviewModal
+        open={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        post={post}
+        customMessage={customMessage}
+        selectedCustomers={resolvedRecipients}
+        sendEmail={sendEmail}
+        sendWhatsApp={sendWhatsApp}
+        onProceedToShare={() => {
+          setPreviewModalOpen(false);
+          handleShare();
+        }}
+      />
     </Modal>
   );
 }

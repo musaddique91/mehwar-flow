@@ -792,11 +792,12 @@ export function PostCard({
   const thumbs = post.media.filter((m) => m.thumbnailUrl).slice(0, 4);
   return (
     <Card
+      id={`post-${post.id}`}
       layout
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
-      className="space-y-3"
+      className="space-y-3 transition-all duration-300"
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">

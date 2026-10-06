@@ -15,7 +15,9 @@ import {
   MessageSquare,
   Plug,
   Plus,
+  QrCode,
   RefreshCw,
+  Settings,
   ThumbsUp,
   Trash2,
   Users,
@@ -27,6 +29,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { PLATFORM_RULES, PLATFORMS, type ChannelDto, type Platform } from '@mehwar/shared';
 import { FadeIn, Stagger, StaggerItem } from '@/components/motion';
+import { WhatsAppModal } from '@/components/modals/WhatsAppModal';
 import { Button, Card, Modal, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -40,6 +43,7 @@ const NOTES: Partial<Record<Platform, string>> = {
   youtube: 'Uploads stay private until Google verifies the app.',
   snapchat: 'Publishing requires Snap partner access.',
   linkedin: 'Requires Share on LinkedIn & Sign In with LinkedIn products enabled.',
+  whatsapp: 'Pair via QR code or configure in Settings to dispatch customer updates.',
 };
 
 interface YouTubeVideoItem {
@@ -114,21 +118,21 @@ function ChannelDetailsModal({
               <div className="flex flex-wrap items-center gap-4">
                 <span
                   className="relative size-16 shrink-0 rounded-full p-[2px]"
-                  style={{ background: PLATFORM_BRAND.youtube.gradient }}
+                  style={{ background: PLATFORM_BRAND[channel.platform]?.gradient || PLATFORM_BRAND.youtube.gradient }}
                 >
                   <span className="flex size-full items-center justify-center overflow-hidden rounded-full bg-elevated">
                     {data.avatarUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={data.avatarUrl} alt="" className="size-full object-cover" />
                     ) : (
-                      <PlatformIcon platform="youtube" className="size-7" />
+                      <PlatformIcon platform={channel.platform} className="size-7" />
                     )}
                   </span>
                 </span>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-xl font-bold truncate">{data.title}</h3>
                   <p className="text-xs text-muted">
-                    {data.customUrl ? `@${data.customUrl}` : 'YouTube Channel'}
+                    {data.customUrl ? `@${data.customUrl}` : `${PLATFORM_RULES[channel.platform]?.label || 'Connected'} Channel`}
                   </p>
                   {data.description && (
                     <p className="mt-1 line-clamp-2 text-xs text-muted">{data.description}</p>
@@ -389,6 +393,8 @@ function ChannelsInner() {
     return channels.data.filter((c) => c.platform === platformFilter);
   }, [channels.data, platformFilter]);
 
+  const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
+
   return (
     <div className="w-full space-y-8 pt-2">
       <FadeIn>
@@ -399,11 +405,22 @@ function ChannelsInner() {
               View and manage all connected channels or filter by social media platform.
             </p>
           </div>
-          <Link href="/settings#networks">
-            <Button variant="secondary" size="sm">
-              <Plus className="size-4" /> Add Network
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setWhatsappModalOpen(true)}
+              className="gap-1.5 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+            >
+              <PlatformIcon platform="whatsapp" className="size-3.5" />
+              <span>Connect WhatsApp</span>
             </Button>
-          </Link>
+            <Link href="/settings#networks">
+              <Button size="sm">
+                <Plus className="size-4" /> Add Network
+              </Button>
+            </Link>
+          </div>
         </div>
       </FadeIn>
 
@@ -632,27 +649,56 @@ function ChannelsInner() {
             </Link>
           </Card>
         ) : filteredChannels.length === 0 ? (
-          <Card className="flex flex-col items-center justify-center p-8 text-center bg-card-strong">
-            {platformFilter !== 'all' && (
+          platformFilter === 'whatsapp' ? (
+            <Card className="flex flex-col items-center justify-center p-8 text-center bg-card-strong border-emerald-500/20">
               <span
-                className="flex size-12 items-center justify-center rounded-2xl text-white shadow-md mb-3"
-                style={{ background: PLATFORM_BRAND[platformFilter].gradient }}
+                className="flex size-14 items-center justify-center rounded-2xl text-white shadow-lg mb-3"
+                style={{ background: PLATFORM_BRAND.whatsapp.gradient }}
               >
-                <PlatformIcon platform={platformFilter} className="size-6" />
+                <PlatformIcon platform="whatsapp" className="size-7" />
               </span>
-            )}
-            <h3 className="font-bold text-lg">
-              No {platformFilter !== 'all' ? PLATFORM_RULES[platformFilter].label : ''} channels connected
-            </h3>
-            <p className="mt-1 text-sm text-muted max-w-sm">
-              You haven't connected any {platformFilter !== 'all' ? PLATFORM_RULES[platformFilter].label : ''} accounts yet.
-            </p>
-            <Link href={platformFilter !== 'all' ? `/settings?connect=${platformFilter}` : '/settings#networks'} className="mt-5">
-              <Button variant="secondary">
-                <Plug className="size-4" /> Connect {platformFilter !== 'all' ? PLATFORM_RULES[platformFilter].label : 'Network'} in Settings
-              </Button>
-            </Link>
-          </Card>
+              <h3 className="font-bold text-lg">No WhatsApp Channel Connected</h3>
+              <p className="mt-1 text-sm text-muted max-w-sm">
+                Pair your WhatsApp account via QR scan or configure your WhatsApp session in Settings to dispatch videos and posts directly to your customers.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
+                <Button
+                  variant="primary"
+                  onClick={() => setWhatsappModalOpen(true)}
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+                >
+                  <QrCode className="size-4" /> Scan QR to Connect
+                </Button>
+                <Link href="/settings?tab=whatsapp">
+                  <Button variant="secondary" className="gap-1.5">
+                    <Settings className="size-4" /> WhatsApp Settings
+                  </Button>
+                </Link>
+              </div>
+            </Card>
+          ) : (
+            <Card className="flex flex-col items-center justify-center p-8 text-center bg-card-strong">
+              {platformFilter !== 'all' && (
+                <span
+                  className="flex size-12 items-center justify-center rounded-2xl text-white shadow-md mb-3"
+                  style={{ background: PLATFORM_BRAND[platformFilter].gradient }}
+                >
+                  <PlatformIcon platform={platformFilter} className="size-6" />
+                </span>
+              )}
+              <h3 className="font-bold text-lg">
+                No {platformFilter !== 'all' ? PLATFORM_RULES[platformFilter].label : ''} channels connected
+              </h3>
+              <p className="mt-1 text-sm text-muted max-w-sm">
+                You haven't connected any {platformFilter !== 'all' ? PLATFORM_RULES[platformFilter].label : ''} accounts yet.
+              </p>
+              <Link href={platformFilter !== 'all' ? `/settings?connect=${platformFilter}` : '/settings#networks'} className="mt-5">
+                <Button variant="secondary">
+                  <Plug className="size-4" /> Connect {platformFilter !== 'all' ? PLATFORM_RULES[platformFilter].label : 'Network'} in Settings
+                </Button>
+              </Link>
+            </Card>
+          )
         ) : (
           <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <AnimatePresence>
@@ -733,6 +779,15 @@ function ChannelsInner() {
                               <BarChart2 className="size-3.5 mr-1.5" /> Details
                             </Button>
                           </Link>
+                        ) : c.platform === 'whatsapp' ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="flex-1 justify-center"
+                            onClick={() => setWhatsappModalOpen(true)}
+                          >
+                            <QrCode className="size-3.5 mr-1.5" /> Reconnect
+                          </Button>
                         ) : (
                           <Link href={`/settings?connect=${c.platform}`} className="flex-1">
                             <Button size="sm" variant="secondary" className="w-full justify-center">
@@ -780,6 +835,14 @@ function ChannelsInner() {
           </div>
         </div>
       </Modal>
+
+      <WhatsAppModal
+        open={whatsappModalOpen}
+        onClose={() => {
+          setWhatsappModalOpen(false);
+          invalidate('channels', 'whatsapp');
+        }}
+      />
     </div>
   );
 }

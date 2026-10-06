@@ -1,11 +1,13 @@
 'use client';
 
-import { CheckCircle2, Loader2, MessageSquare, QrCode, RefreshCw, Unplug } from 'lucide-react';
+import { CheckCircle2, Loader2, MessageSquare, QrCode, RefreshCw, Settings, Unplug } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import type { WhatsAppStatusDto } from '@mehwar/shared';
 import { Button, Modal } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { invalidate } from '@/lib/hooks';
 
 export function WhatsAppModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [status, setStatus] = useState<WhatsAppStatusDto>({ status: 'DISCONNECTED' });
@@ -43,6 +45,7 @@ export function WhatsAppModal({ open, onClose }: { open: boolean; onClose: () =>
       await api('/whatsapp/disconnect', { method: 'POST' });
       setStatus({ status: 'DISCONNECTED' });
       setPolling(false);
+      invalidate('channels', 'whatsapp');
       toast.success('WhatsApp disconnected');
     } catch (err) {
       toast.error('Could not disconnect WhatsApp');
@@ -74,6 +77,7 @@ export function WhatsAppModal({ open, onClose }: { open: boolean; onClose: () =>
       const s = await fetchStatus();
       if (s?.status === 'CONNECTED') {
         setPolling(false);
+        invalidate('channels', 'whatsapp');
         toast.success('WhatsApp connected successfully! 🎉');
       }
     }, 2500);
@@ -96,11 +100,16 @@ export function WhatsAppModal({ open, onClose }: { open: boolean; onClose: () =>
               </p>
             </div>
             <div className="rounded-2xl border border-line bg-card/60 p-3.5 text-xs text-muted text-left space-y-1">
-              <p className="font-semibold text-fg">✅ Automated delivery active</p>
-              <p>You can now send video and post links directly to your customers via WhatsApp without leaving Mehwar Flow.</p>
+              <p className="font-semibold text-fg">✅ Added to Channels & delivery active</p>
+              <p>Your WhatsApp channel is now active. You can dispatch video and social links directly to your customers and groups without leaving Mehwar Flow.</p>
             </div>
-            <div className="flex justify-center gap-2 pt-2">
-              <Button variant="ghost" onClick={onClose}>
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              <Link href="/settings?tab=whatsapp" onClick={onClose}>
+                <Button variant="secondary" size="sm" className="gap-1.5">
+                  <Settings className="size-3.5" /> WhatsApp Settings
+                </Button>
+              </Link>
+              <Button variant="ghost" size="sm" onClick={onClose}>
                 Close
               </Button>
               <Button variant="danger" size="sm" onClick={handleDisconnect} loading={loading}>

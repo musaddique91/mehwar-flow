@@ -7,6 +7,7 @@ import {
   SiSnapchat,
   SiThreads,
   SiTiktok,
+  SiWhatsapp,
   SiX,
   SiYoutube,
 } from 'react-icons/si';
@@ -56,6 +57,11 @@ export const PLATFORM_BRAND: Record<Platform, PlatformBrand> = {
     icon: FaLinkedinIn,
     color: '#0a66c2',
     gradient: 'linear-gradient(135deg,#0077b5,#0a66c2)',
+  },
+  whatsapp: {
+    icon: SiWhatsapp,
+    color: '#25d366',
+    gradient: 'linear-gradient(135deg,#25d366,#128c7e)',
   },
 };
 

@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Bell,
+  CalendarClock,
   CalendarDays,
   ChartNoAxesColumn,
   House,
@@ -45,6 +46,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: House },
+  { href: '/schedules', label: 'My Schedules', icon: CalendarClock },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/channels', label: 'Channels', icon: Plug },
   { href: '/comments', label: 'Comments', icon: MessageSquare },

@@ -12,6 +12,7 @@ export const PLATFORMS = [
   'tiktok',
   'snapchat',
   'linkedin',
+  'whatsapp',
 ] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
@@ -157,6 +158,20 @@ export const PLATFORM_RULES: Record<Platform, PlatformRules> = {
     maxVideos: 1,
     allowsMixedMedia: false,
     maxVideoDurationSec: 600,
+    linksNotClickable: false,
+    supportsThreads: false,
+    imageMimeTypes: COMMON_IMAGES,
+    videoMimeTypes: COMMON_VIDEOS,
+  },
+  whatsapp: {
+    label: 'WhatsApp',
+    maxTextLength: 4_096,
+    allowsTextOnly: true,
+    requiresVideo: false,
+    maxImages: 10,
+    maxVideos: 1,
+    allowsMixedMedia: false,
+    maxVideoDurationSec: 300,
     linksNotClickable: false,
     supportsThreads: false,
     imageMimeTypes: COMMON_IMAGES,

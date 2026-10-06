@@ -664,6 +664,7 @@ export function Composer({
                         handle={previewChannel.username ?? handle}
                         mediaUrl={media[0]?.thumbnailUrl ?? (media[0]?.kind === 'image' ? media[0]?.url : null) ?? null}
                         videoUrl={previewChannel.platform === 'youtube' ? (media.find(m => m.kind === 'video')?.url ?? null) : null}
+                        options={draftOf(previewChannel.id).options}
                       />
                     </motion.div>
                   )}

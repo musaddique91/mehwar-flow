@@ -2,8 +2,10 @@
 
 import {
   Bookmark,
+  CheckCheck,
   Ellipsis,
   Heart,
+  Lock,
   MessageCircle,
   Music2,
   Play,
@@ -26,6 +28,8 @@ export interface PreviewProps {
   mediaUrl?: string | null;
   /** Direct video URL — used by YouTube preview to show a playable video. */
   videoUrl?: string | null;
+  /** Platform-specific target options (e.g. whatsappPostType) */
+  options?: Record<string, unknown>;
   className?: string;
 }
 
@@ -82,7 +86,16 @@ function RichText({ text, className }: { text: string; className?: string }) {
 
 const placeholder = 'Your post will appear here ✨';
 
-export function PostPreview({ platform, text, name, handle, mediaUrl, videoUrl, className }: PreviewProps) {
+export function PostPreview({
+  platform,
+  text,
+  name,
+  handle,
+  mediaUrl,
+  videoUrl,
+  options,
+  className,
+}: PreviewProps) {
   const body = text.trim() || placeholder;
   const frame = 'rounded-2xl border border-line bg-elevated text-[14px] text-fg shadow-xl';
 
@@ -322,5 +335,98 @@ export function PostPreview({ platform, text, name, handle, mediaUrl, videoUrl, 
           </div>
         </div>
       );
+    case 'whatsapp': {
+      const isStatus = (options?.whatsappPostType ?? 'STATUS') === 'STATUS';
+      if (isStatus) {
+        return (
+          <div className={cn(frame, 'overflow-hidden border border-emerald-500/20 shadow-xl bg-[#0b141a]', className)}>
+            {/* WhatsApp Status Header */}
+            <div className="flex items-center justify-between bg-[#1f2c34] px-3.5 py-2.5 text-white">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="relative">
+                  <div className="rounded-full ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#1f2c34]">
+                    <Avatar name={name} size={36} />
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate leading-tight">{name}</p>
+                  <p className="text-[11px] text-emerald-400 font-medium leading-tight">Status • Just now</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-[#aebac1]">
+                <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                  Status
+                </span>
+                <PlatformIcon platform="whatsapp" className="size-4 text-[#25d366]" />
+              </div>
+            </div>
+
+            {/* Status Story / Bio Preview */}
+            <div className="p-4 space-y-3 bg-[#0b141a]/95 min-h-[180px] flex flex-col justify-center">
+              {mediaUrl ? (
+                <div className="relative rounded-2xl overflow-hidden border border-emerald-500/30 bg-black aspect-video flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={mediaUrl} alt="" className="w-full h-full object-cover" />
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 text-white text-xs">
+                    <RichText text={body} className="line-clamp-2 text-white" />
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-[#0b3b32] to-[#04201a] p-4 text-center shadow-lg space-y-2">
+                  <p className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">
+                    WhatsApp About / Bio Status
+                  </p>
+                  <p className="text-base font-medium text-white italic break-words">
+                    &ldquo;{body || 'Hey there! I am using WhatsApp.'}&rdquo;
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className={cn(frame, 'overflow-hidden border border-emerald-500/20 shadow-xl bg-[#0b141a]', className)}>
+          {/* WhatsApp Header */}
+          <div className="flex items-center justify-between bg-[#1f2c34] px-3.5 py-2.5 text-white">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Avatar name={name} size={36} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white truncate leading-tight">{name}</p>
+                <p className="text-[11px] text-emerald-400 font-medium leading-tight">online</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-[#aebac1]">
+              <PlatformIcon platform="whatsapp" className="size-4 text-[#25d366]" />
+            </div>
+          </div>
+
+          {/* Chat wallpaper & bubble */}
+          <div className="p-4 space-y-3 bg-[radial-gradient(#1f2c34_1px,transparent_1px)] [background-size:16px_16px] bg-[#0b141a]/95 min-h-[180px] flex flex-col justify-end">
+            <div className="mx-auto rounded-lg bg-[#182229] px-3 py-1 text-[10px] text-[#ffd279] shadow-sm flex items-center gap-1.5 border border-[#ffd279]/20">
+              <Lock className="size-2.5 shrink-0" />
+              <span>Messages are end-to-end encrypted</span>
+            </div>
+
+            <div className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm bg-[#005c4b] text-white p-3 shadow-md space-y-2">
+              {mediaUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={mediaUrl}
+                  alt=""
+                  className="rounded-xl max-h-56 w-full object-cover"
+                />
+              )}
+              <RichText text={body} className="text-xs text-[#e9edef] leading-relaxed break-words" />
+              <div className="flex items-center justify-end gap-1 text-[10px] text-[#8696a0] pt-0.5">
+                <span>Just now</span>
+                <CheckCheck className="size-3.5 text-[#53bdeb]" />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 }

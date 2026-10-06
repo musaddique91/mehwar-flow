@@ -22,9 +22,29 @@ import { ChannelsService } from './channels.service';
 const platformPipe = new ZodPipe(z.enum(PLATFORMS));
 const selectSchema = z.object({ externalIds: z.array(z.string().min(1)).min(1).max(50) });
 
-@Controller('channels')
+@Controller(['channels', 'api/channels'])
 export class ChannelsController {
   constructor(private readonly channels: ChannelsService) {}
+
+  /** Public endpoint to serve or stream permanent channel avatars (with cache headers). */
+  @Public()
+  @Get(':id/avatar')
+  async getAvatar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('refresh') refresh: string,
+    @Res() res: Response,
+  ) {
+    const avatar = await this.channels.getChannelAvatarStream(id, refresh === 'true');
+    if (!avatar) {
+      return res.status(404).send('Avatar not found');
+    }
+    if ('redirectUrl' in avatar) {
+      return res.redirect(302, avatar.redirectUrl);
+    }
+    res.setHeader('Content-Type', avatar.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    return (avatar.stream as any).pipe(res);
+  }
 
   @Get()
   list(@CurrentAuth() auth: AuthContext) {

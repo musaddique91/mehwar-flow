@@ -61,10 +61,45 @@ export async function publishTarget(
 
     let outcome: PublishOutcome;
     try {
-      if (channel.status !== 'ACTIVE' || !channel.credential) {
-        throw new AuthError(`${channel.displayName} needs to be reconnected`);
-      }
-      const connector = connectors.get(channel.platform);
+      if (channel.platform === 'whatsapp') {
+        const options = (target.options ?? {}) as TargetOptions;
+        const text = target.textOverride ?? target.post.text;
+        const apiUrl = process.env.API_URL || 'http://127.0.0.1:4000';
+        const res = await fetch(`${apiUrl}/api/whatsapp/internal-publish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            postType: options.whatsappPostType ?? 'STATUS',
+            recipient: options.whatsappRecipient,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+          throw new Error(errData.message || 'WhatsApp publish failed');
+        }
+
+        const resData = (await res.json()) as { externalId?: string; url?: string };
+        await db.postTarget.update({
+          where: { id: target.id },
+          data: {
+            status: 'PUBLISHED',
+            externalId: resData.externalId || `wa-${Date.now()}`,
+            externalUrl: resData.url ?? null,
+            publishedAt: new Date(),
+            lastError: null,
+          },
+        });
+        if (channel.status !== 'ACTIVE') {
+          await db.channel.update({ where: { id: channel.id }, data: { status: 'ACTIVE' } });
+        }
+        outcome = 'published';
+      } else {
+        if (channel.status !== 'ACTIVE' || !channel.credential) {
+          throw new AuthError(`${channel.displayName} needs to be reconnected`);
+        }
+        const connector = connectors.get(channel.platform);
 
       // Refresh first if the token is (nearly) expired.
       let credential = channel.credential;
@@ -154,7 +189,8 @@ export async function publishTarget(
         },
       });
       outcome = 'published';
-    } catch (err) {
+    }
+  } catch (err) {
       const message = (err as Error).message || 'Unknown error';
       if (err instanceof AuthError) {
         await db.channel.update({ where: { id: channel.id }, data: { status: 'NEEDS_RECONNECT' } });

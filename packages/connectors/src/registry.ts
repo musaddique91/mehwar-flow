@@ -24,6 +24,7 @@ const ENV_PREFIX: Record<Platform, string> = {
   tiktok: 'TIKTOK',
   snapchat: 'SNAPCHAT',
   linkedin: 'LINKEDIN',
+  whatsapp: 'WHATSAPP',
 };
 
 export function clientConfigFromEnv(

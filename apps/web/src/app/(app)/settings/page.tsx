@@ -56,6 +56,7 @@ import { cn } from '@/lib/cn';
 import { invalidate, useApi } from '@/lib/hooks';
 import { formatBytes } from '@/lib/media';
 import { PlatformIcon, PLATFORM_BRAND } from '@/lib/platforms';
+import { WhatsAppModal } from '@/components/modals/WhatsAppModal';
 
 
 
@@ -743,6 +744,7 @@ const NETWORK_NOTES: Record<string, string> = {
   threads: 'Share text and media updates to your Threads profile.',
   pinterest: 'Create and publish pins directly to your Pinterest boards.',
   snapchat: 'Publishing requires Snapchat partner access.',
+  whatsapp: 'Pair via QR code or configure in Settings to dispatch updates directly to customers.',
 };
 
 interface PlatformSetupInfo {
@@ -904,6 +906,26 @@ const PLATFORM_SETUP_GUIDES: Record<Platform, PlatformSetupInfo> = {
     ],
     notes: 'Publishing requires Snapchat partner-level access.',
   },
+  whatsapp: {
+    title: 'WhatsApp Web Pairing Guide',
+    portalUrl: 'https://web.whatsapp.com',
+    portalName: 'WhatsApp Web',
+    envVars: [],
+    redirectPath: '/settings#whatsapp',
+    requiredScopesOrProducts: [
+      'WhatsApp Multi-Device Web Client',
+      'Automated customer media & message dispatch',
+    ],
+    steps: [
+      'Click "Start QR Scan" below or open Settings → WhatsApp tab.',
+      'Open WhatsApp on your mobile phone.',
+      'Tap Settings (iOS) or ⋮ Menu (Android) → Linked Devices.',
+      'Tap "Link a Device" and scan the displayed QR code with your phone camera.',
+      'Once linked, your WhatsApp session is saved and automatically appears in your Channels list.',
+    ],
+    notes:
+      'No Meta developer account or API token is required for WhatsApp Web QR pairing. Your session remains linked for automated delivery and customer sharing.',
+  },
 };
 
 function NetworkSetupModal({
@@ -1007,78 +1029,110 @@ function NetworkSetupModal({
           </ol>
         </div>
 
-        {/* Redirect URI Box */}
-        <div className="space-y-2 rounded-2xl border border-line bg-elevated/60 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-fg">Authorized Redirect URI</span>
-              <div className="flex items-center rounded-lg bg-card p-0.5 border border-line text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setUseHttps(false)}
-                  className={cn(
-                    'px-2 py-0.5 rounded-md font-medium transition cursor-pointer',
-                    !useHttps ? 'bg-primary text-white' : 'text-muted hover:text-fg',
-                  )}
-                >
-                  HTTP
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUseHttps(true)}
-                  className={cn(
-                    'px-2 py-0.5 rounded-md font-medium transition cursor-pointer',
-                    useHttps ? 'bg-primary text-white' : 'text-muted hover:text-fg',
-                  )}
-                >
-                  HTTPS
-                </button>
-              </div>
+        {platform === 'whatsapp' ? (
+          <div className="space-y-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+              <QrCode className="size-4" />
+              <span>Direct WhatsApp Web QR Pairing</span>
             </div>
-            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5" onClick={copyRedirectUrl}>
-              {copiedUrl ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
-              {copiedUrl ? 'Copied' : 'Copy URI'}
-            </Button>
+            <p className="text-xs text-muted leading-relaxed">
+              No developer credentials, OAuth client secrets, or webhook configuration needed. You can pair your WhatsApp account directly using our built-in QR code scanner or adjust WhatsApp session settings at any time.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
+                onClick={() => {
+                  onClose();
+                  onConnect('whatsapp');
+                }}
+              >
+                <QrCode className="size-3.5" /> Start QR Pairing Now
+              </Button>
+              <Link href="/settings?tab=whatsapp" onClick={onClose}>
+                <Button variant="secondary" size="sm" className="gap-1.5">
+                  <Settings className="size-3.5" /> Go to WhatsApp Settings
+                </Button>
+              </Link>
+            </div>
           </div>
-          <code className="block rounded-xl bg-card border border-line p-2.5 text-xs font-mono text-primary break-all select-all">
-            {redirectUrl}
-          </code>
-          <p className="text-[11px] text-muted">
-            {requiresHttps
-              ? '⚠️ Threads and Meta require HTTPS redirect URLs. Local development supports https://localhost:3000.'
-              : "Add this exact URL to your app's OAuth 2.0 Redirect URLs list in the developer portal."}
-          </p>
-        </div>
+        ) : (
+          <>
+            {/* Redirect URI Box */}
+            <div className="space-y-2 rounded-2xl border border-line bg-elevated/60 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-fg">Authorized Redirect URI</span>
+                  <div className="flex items-center rounded-lg bg-card p-0.5 border border-line text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setUseHttps(false)}
+                      className={cn(
+                        'px-2 py-0.5 rounded-md font-medium transition cursor-pointer',
+                        !useHttps ? 'bg-primary text-white' : 'text-muted hover:text-fg',
+                      )}
+                    >
+                      HTTP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseHttps(true)}
+                      className={cn(
+                        'px-2 py-0.5 rounded-md font-medium transition cursor-pointer',
+                        useHttps ? 'bg-primary text-white' : 'text-muted hover:text-fg',
+                      )}
+                    >
+                      HTTPS
+                    </button>
+                  </div>
+                </div>
+                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5" onClick={copyRedirectUrl}>
+                  {copiedUrl ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+                  {copiedUrl ? 'Copied' : 'Copy URI'}
+                </Button>
+              </div>
+              <code className="block rounded-xl bg-card border border-line p-2.5 text-xs font-mono text-primary break-all select-all">
+                {redirectUrl}
+              </code>
+              <p className="text-[11px] text-muted">
+                {requiresHttps
+                  ? '⚠️ Threads and Meta require HTTPS redirect URLs. Local development supports https://localhost:3000.'
+                  : "Add this exact URL to your app's OAuth 2.0 Redirect URLs list in the developer portal."}
+              </p>
+            </div>
 
-        {/* Required Products & Permissions */}
-        <div className="space-y-2 rounded-2xl border border-line bg-elevated/60 p-4">
-          <span className="text-xs font-bold text-fg">Required Products & Permissions</span>
-          <ul className="mt-1 space-y-1.5 text-xs text-muted">
-            {guide.requiredScopesOrProducts.map((p, idx) => (
-              <li key={idx} className="flex items-start gap-2">
-                <span className="text-primary font-bold">•</span>
-                <span className="text-fg/90">{p}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+            {/* Required Products & Permissions */}
+            <div className="space-y-2 rounded-2xl border border-line bg-elevated/60 p-4">
+              <span className="text-xs font-bold text-fg">Required Products & Permissions</span>
+              <ul className="mt-1 space-y-1.5 text-xs text-muted">
+                {guide.requiredScopesOrProducts.map((p, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="text-primary font-bold">•</span>
+                    <span className="text-fg/90">{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-        {/* Environment Variables Snippet */}
-        <div className="space-y-2 rounded-2xl border border-line bg-elevated/60 p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-fg flex items-center gap-1.5">
-              <Terminal className="size-3.5 text-muted" />
-              <span>Add to .env</span>
-            </span>
-            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5" onClick={copyEnvSnippet}>
-              {copiedEnv ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
-              {copiedEnv ? 'Copied' : 'Copy .env'}
-            </Button>
-          </div>
-          <pre className="rounded-xl bg-card border border-line p-2.5 text-xs font-mono text-emerald-400 overflow-x-auto select-all">
-            {envSnippet}
-          </pre>
-        </div>
+            {/* Environment Variables Snippet */}
+            <div className="space-y-2 rounded-2xl border border-line bg-elevated/60 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-fg flex items-center gap-1.5">
+                  <Terminal className="size-3.5 text-muted" />
+                  <span>Add to .env</span>
+                </span>
+                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5" onClick={copyEnvSnippet}>
+                  {copiedEnv ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+                  {copiedEnv ? 'Copied' : 'Copy .env'}
+                </Button>
+              </div>
+              <pre className="rounded-xl bg-card border border-line p-2.5 text-xs font-mono text-emerald-400 overflow-x-auto select-all">
+                {envSnippet}
+              </pre>
+            </div>
+          </>
+        )}
 
         {guide.notes && (
           <p className="text-xs text-muted italic bg-line/20 p-3 rounded-xl border border-line/40">
@@ -1128,8 +1182,13 @@ function NetworksSection() {
   const [removing, setRemoving] = useState<ChannelDto | null>(null);
   const [busyDisconnect, setBusyDisconnect] = useState(false);
   const [setupGuidePlatform, setSetupGuidePlatform] = useState<Platform | null>(null);
+  const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
 
   async function connect(platform: Platform) {
+    if (platform === 'whatsapp') {
+      setWhatsappModalOpen(true);
+      return;
+    }
     setConnecting(platform);
     try {
       const { url } = await api<{ url: string }>(`/channels/connect/${platform}`, { method: 'POST' });
@@ -1337,6 +1396,23 @@ function NetworksSection() {
                         <BookOpen className="size-3.5 text-primary" />
                         Setup Guide & Instructions
                       </Button>
+                    ) : p === 'whatsapp' ? (
+                      <div className="flex items-center gap-2 w-full">
+                        <Button
+                          size="sm"
+                          variant={hasConnected ? 'secondary' : 'primary'}
+                          onClick={() => connect(p)}
+                          className="flex-1 justify-center gap-1.5"
+                        >
+                          <QrCode className="size-3.5" />
+                          {hasConnected ? 'Re-pair via QR' : 'Scan QR to Connect'}
+                        </Button>
+                        <Link href="/settings?tab=whatsapp">
+                          <Button size="sm" variant="ghost" className="px-2.5 h-8" title="WhatsApp Configuration">
+                            <Settings className="size-3.5 text-muted hover:text-fg" />
+                          </Button>
+                        </Link>
+                      </div>
                     ) : (
                       <Button
                         size="sm"
@@ -1384,7 +1460,94 @@ function NetworksSection() {
           connecting={connecting === setupGuidePlatform}
         />
       )}
+
+      <WhatsAppModal
+        open={whatsappModalOpen}
+        onClose={() => {
+          setWhatsappModalOpen(false);
+          invalidate('channels', 'whatsapp');
+        }}
+      />
     </div>
+  );
+}
+
+function WhatsAppStatusPanel() {
+  const [statusText, setStatusText] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSetStatus = async () => {
+    if (!statusText.trim()) {
+      toast.error('Please enter a status message');
+      return;
+    }
+    setLoading(true);
+    try {
+      await api('/whatsapp/status/profile', {
+        method: 'POST',
+        json: { status: statusText.trim() },
+      });
+      toast.success('WhatsApp status updated! 🟢', {
+        description: 'Your profile About / Bio and WhatsApp story have been updated.',
+      });
+      setStatusText('');
+    } catch (err) {
+      toast.error('Failed to set WhatsApp status', {
+        description: (err as ApiError).message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="p-6">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+        {/* Icon + description */}
+        <div className="flex items-start gap-4 flex-1">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500 ring-8 ring-emerald-500/10 shrink-0">
+            <MessageSquare className="size-6" />
+          </div>
+          <div className="space-y-1 min-w-0">
+            <h3 className="text-base font-bold tracking-tight">
+              Set WhatsApp Status
+            </h3>
+            <p className="text-xs text-muted max-w-md">
+              Update your WhatsApp profile About / Bio and broadcast a WhatsApp status story using{' '}
+              <code className="rounded bg-emerald-500/10 px-1 py-0.5 font-mono text-[11px] text-emerald-500">
+                client.setStatus()
+              </code>
+              . Max ~139 characters. This will also be used when you select &ldquo;Set Status&rdquo; in the post composer.
+            </p>
+          </div>
+        </div>
+
+        {/* Input + button */}
+        <div className="flex flex-col gap-2 sm:w-80">
+          <div className="relative">
+            <textarea
+              value={statusText}
+              onChange={(e) => setStatusText(e.target.value.slice(0, 139))}
+              rows={3}
+              placeholder="Hey there! Sharing my latest posts 🎉"
+              className="w-full resize-none rounded-xl border border-line bg-elevated/60 px-3 py-2.5 pr-12 text-sm outline-none transition focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/60"
+            />
+            <span className={`absolute bottom-2.5 right-3 text-[11px] font-mono ${statusText.length > 120 ? 'text-amber-400' : 'text-muted'}`}>
+              {statusText.length}/139
+            </span>
+          </div>
+          <Button
+            variant="primary"
+            onClick={handleSetStatus}
+            loading={loading}
+            disabled={!statusText.trim()}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white w-full justify-center"
+          >
+            <MessageSquare className="size-4" /> Set Status Now
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -1415,7 +1578,7 @@ function WhatsAppSection() {
     try {
       await api('/whatsapp/disconnect', { method: 'POST' });
       setData({ status: 'DISCONNECTED', savedInDb: true });
-      invalidate('whatsapp');
+      invalidate('whatsapp', 'channels');
       setPolling(false);
       toast.success('WhatsApp disconnected successfully');
     } catch {
@@ -1434,7 +1597,7 @@ function WhatsAppSection() {
         setData(s);
         if (s.status === 'CONNECTED') {
           setPolling(false);
-          invalidate('whatsapp');
+          invalidate('whatsapp', 'channels');
           toast.success('WhatsApp connected and saved in database! 🎉');
         }
       } catch {
@@ -1486,6 +1649,13 @@ function WhatsAppSection() {
           </div>
 
           <div className="flex items-center gap-2">
+            {isConnected && (
+              <Link href="/channels?platform=whatsapp">
+                <Button variant="secondary" size="sm" className="gap-1.5 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10">
+                  <PlatformIcon platform="whatsapp" className="size-3.5" /> View in Channels
+                </Button>
+              </Link>
+            )}
             {isConnected ? (
               <Button variant="danger" size="sm" onClick={handleDisconnect} loading={loading}>
                 <Unplug className="size-4" /> Disconnect
@@ -1650,6 +1820,9 @@ function WhatsAppSection() {
           </div>
         </Card>
       </div>
+
+      {/* Set Profile Status / Story Panel — only visible when connected */}
+      {isConnected && <WhatsAppStatusPanel />}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type IORedis from 'ioredis';
 import { randomToken } from '@mehwar/crypto';
+import type { Storage } from '@mehwar/storage';
 import {
   createPkcePair,
   type ConnectedAccount,
@@ -12,7 +13,7 @@ import { PLATFORMS, type ChannelDto, type Platform } from '@mehwar/shared';
 import { EntitlementsService } from '../billing/entitlements.service';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { QueuesService } from '../infra/queues.service';
-import { CONNECTORS, REDIS } from '../infra/tokens';
+import { CONNECTORS, REDIS, STORAGE } from '../infra/tokens';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -37,12 +38,25 @@ interface PendingAccounts {
 export function toChannelDto(
   c: Channel & { credential?: { accessTokenExpiresAt: Date | null } | null },
 ): ChannelDto {
+  let avatarUrl = c.avatarUrl;
+  if (
+    c.platform === 'facebook' ||
+    c.platform === 'instagram' ||
+    c.platform === 'threads' ||
+    (c.avatarUrl &&
+      (c.avatarUrl.includes('fbcdn.net') ||
+        c.avatarUrl.includes('fbsbx.com') ||
+        c.avatarUrl.includes('cdninstagram.com') ||
+        c.avatarUrl.includes('/mehwar-media/public/avatars/')))
+  ) {
+    avatarUrl = `/api/channels/${c.id}/avatar`;
+  }
   return {
     id: c.id,
     platform: c.platform,
     displayName: c.displayName,
     username: c.username,
-    avatarUrl: c.avatarUrl,
+    avatarUrl,
     status: c.status,
     tokenExpiresAt: c.credential?.accessTokenExpiresAt?.toISOString() ?? null,
     createdAt: c.createdAt.toISOString(),
@@ -61,6 +75,7 @@ export class ChannelsService {
     private readonly queues: QueuesService,
     @Inject(CONNECTORS) private readonly connectors: ConnectorRegistry,
     @Inject(REDIS) private readonly redis: IORedis,
+    @Inject(STORAGE) private readonly storage: Storage | null,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -99,7 +114,10 @@ export class ChannelsService {
   }
 
   available() {
-    return PLATFORMS.map((platform) => ({ platform, configured: this.connectors.has(platform) }));
+    return PLATFORMS.map((platform) => ({
+      platform,
+      configured: platform === 'whatsapp' ? true : this.connectors.has(platform),
+    }));
   }
 
   async list(organizationId: string): Promise<ChannelDto[]> {
@@ -108,6 +126,14 @@ export class ChannelsService {
       include: { credential: { select: { accessTokenExpiresAt: true } } },
       orderBy: { createdAt: 'asc' },
     });
+    // In background, ensure expiring avatars are mirrored to permanent storage
+    if (this.storage) {
+      for (const ch of channels) {
+        if (this.isExpiringAvatarUrl(ch.avatarUrl)) {
+          this.mirrorAvatar(ch).catch(() => undefined);
+        }
+      }
+    }
     return channels.map(toChannelDto);
   }
 
@@ -167,12 +193,228 @@ export class ChannelsService {
     return token;
   }
 
+  isExpiringAvatarUrl(url?: string | null): boolean {
+    if (!url) return false;
+    if (url.startsWith('/api/channels/')) return false;
+    if (
+      url.includes('fbcdn.net') ||
+      url.includes('fbsbx.com') ||
+      url.includes('cdninstagram.com') ||
+      url.includes('tiktokcdn.com')
+    ) {
+      return true;
+    }
+    const match = url.match(/[?&]oe=([0-9a-fA-F]+)/);
+    if (match && match[1]) {
+      const expiresAtSec = parseInt(match[1], 16);
+      if (!isNaN(expiresAtSec) && Date.now() / 1000 >= expiresAtSec - 3600) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async fetchFreshAvatarUrl(channel: Channel, accessToken: string): Promise<string | null> {
+    try {
+      if (channel.platform === 'facebook') {
+        const url = `https://graph.facebook.com/v21.0/${channel.externalId}?fields=picture.width(320).height(320){url}&access_token=${accessToken}`;
+        const res = await fetch(url);
+        const data = (await res.json()) as any;
+        return data.picture?.data?.url ?? null;
+      }
+      if (channel.platform === 'instagram') {
+        const url = `https://graph.facebook.com/v21.0/${channel.externalId}?fields=profile_picture_url&access_token=${accessToken}`;
+        const res = await fetch(url);
+        const data = (await res.json()) as any;
+        return data.profile_picture_url ?? null;
+      }
+      if (channel.platform === 'threads') {
+        const url = `https://graph.threads.net/v1.0/me?fields=threads_profile_picture_url&access_token=${accessToken}`;
+        const res = await fetch(url);
+        const data = (await res.json()) as any;
+        return data.threads_profile_picture_url ?? null;
+      }
+      if (this.connectors.has(channel.platform)) {
+        const connector = this.connectors.get(channel.platform);
+        if (typeof (connector as any).getChannelDetails === 'function') {
+          const details = await (connector as any).getChannelDetails(channel.externalId, accessToken);
+          return details.avatarUrl ?? null;
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to fetch fresh avatar for channel ${channel.id}: ${(err as Error).message}`);
+    }
+    return null;
+  }
+
+  async mirrorAvatar(channel: Channel, sourceUrl?: string | null): Promise<string | null> {
+    if (!this.storage) return sourceUrl ?? null;
+
+    let targetUrl = sourceUrl ?? channel.avatarUrl;
+
+    if (!targetUrl || this.isExpiringAvatarUrl(targetUrl)) {
+      try {
+        const accessToken = await this.getValidAccessToken(channel.organizationId, channel);
+        if (accessToken) {
+          const fresh = await this.fetchFreshAvatarUrl(channel, accessToken);
+          if (fresh) targetUrl = fresh;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Could not get valid access token for avatar refresh on channel ${channel.id}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    if (!targetUrl) return null;
+
+    try {
+      const res = await fetch(targetUrl);
+      if (!res.ok) {
+        this.logger.warn(`Failed to download avatar from ${targetUrl}: HTTP ${res.status}`);
+        return null;
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      const contentType = res.headers.get('content-type') || 'image/jpeg';
+      const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+      const key = `public/avatars/${channel.id}.${ext}`;
+      await this.storage.put(key, buf, contentType);
+
+      const permanentUrl = this.storage.publicUrl(key);
+      await this.prisma.tenant(channel.organizationId).channel.update({
+        where: { id: channel.id },
+        data: { avatarUrl: permanentUrl },
+      });
+      return permanentUrl;
+    } catch (err) {
+      this.logger.warn(`Failed to mirror avatar for channel ${channel.id}: ${(err as Error).message}`);
+      return targetUrl;
+    }
+  }
+
+  async getChannelAvatarStream(
+    channelId: string,
+    forceRefresh = false,
+  ): Promise<{ stream: NodeJS.ReadableStream; contentType: string } | { redirectUrl: string } | null> {
+    const channel = await withSystemTransaction(this.prisma, (tx) =>
+      tx.channel.findUnique({
+        where: { id: channelId },
+        include: { credential: true },
+      }),
+    );
+    if (!channel) return null;
+
+    if (this.storage) {
+      for (const ext of ['png', 'jpg', 'webp']) {
+        const key = `public/avatars/${channel.id}.${ext}`;
+        if (!forceRefresh) {
+          const head = await this.storage.head(key);
+          if (head) {
+            const stream = await this.storage.getStream(key);
+            return {
+              stream,
+              contentType: head.contentType || (ext === 'png' ? 'image/png' : 'image/jpeg'),
+            };
+          }
+        }
+      }
+
+      // If not yet in storage or forceRefresh requested, mirror it now!
+      const mirrored = await this.mirrorAvatar(channel);
+      if (mirrored) {
+        for (const ext of ['png', 'jpg', 'webp']) {
+          const key = `public/avatars/${channel.id}.${ext}`;
+          const head = await this.storage.head(key);
+          if (head) {
+            const stream = await this.storage.getStream(key);
+            return {
+              stream,
+              contentType: head.contentType || (ext === 'png' ? 'image/png' : 'image/jpeg'),
+            };
+          }
+        }
+      }
+    }
+
+    if (channel.avatarUrl) {
+      return { redirectUrl: channel.avatarUrl };
+    }
+    return null;
+  }
+
   async getDetails(organizationId: string, channelId: string) {
     const channel = await this.prisma.tenant(organizationId).channel.findFirst({
       where: { id: channelId, status: { not: 'DISCONNECTED' } },
       include: { credential: true },
     });
     if (!channel) throw new NotFoundException('Channel not found');
+
+    if (channel.platform === 'whatsapp') {
+      const session = await this.prisma.tenant(organizationId).whatsappSession.findUnique({
+        where: { organizationId },
+      });
+      const localTargets = await this.prisma.tenant(organizationId).postTarget.findMany({
+        where: { channelId: channel.id },
+        include: {
+          post: {
+            include: {
+              media: {
+                include: { media: true },
+                orderBy: { position: 'asc' },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+
+      const localPosts = localTargets.map((t) => {
+        const firstMedia = t.post.media[0]?.media;
+        const text = t.textOverride || t.post.text || 'WhatsApp Post';
+        const isVideo = firstMedia?.mimeType?.startsWith('video/') ?? false;
+        const title = text.slice(0, 80) + (text.length > 80 ? '...' : '');
+        const pubDate = t.publishedAt || t.post.scheduledAt || t.createdAt;
+        return {
+          id: t.externalId || t.id,
+          title,
+          description: text,
+          publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+          thumbnailUrl: firstMedia?.thumbnailKey
+            ? `${(process.env.S3_PUBLIC_URL ?? process.env.S3_ENDPOINT ?? 'http://localhost:9000').replace(/\/$/, '')}/${firstMedia.thumbnailKey}`
+            : null,
+          views: 0,
+          likes: 0,
+          comments: 0,
+          duration: isVideo
+            ? firstMedia?.durationSec
+              ? `${Math.round(firstMedia.durationSec)}s`
+              : '0:30'
+            : '0:00',
+          isShort: false,
+          url: session?.phoneNumber ? `https://wa.me/${session.phoneNumber}` : '',
+          status: t.status,
+        };
+      });
+
+      return {
+        id: channel.id,
+        channelId: channel.externalId,
+        platform: 'whatsapp' as Platform,
+        status: session?.status ?? channel.status,
+        displayName: channel.displayName,
+        username: channel.username,
+        title: channel.displayName,
+        description: `Connected WhatsApp session (${session?.platform ?? 'WhatsApp Web'})`,
+        customUrl: session?.phoneNumber ? `https://wa.me/${session.phoneNumber}` : null,
+        avatarUrl: channel.avatarUrl ?? null,
+        bannerUrl: null,
+        subscriberCount: null,
+        viewCount: null,
+        videoCount: localPosts.length,
+        videos: localPosts,
+      };
+    }
 
     const connector = this.connectors.get(channel.platform) as any;
     const accessToken = await this.getValidAccessToken(organizationId, channel);
@@ -258,7 +500,10 @@ export class ChannelsService {
       title: details.title ?? channel.displayName,
       description: details.description ?? `Connected ${channel.platform.toUpperCase()} channel`,
       customUrl: details.customUrl ?? (channel.username ? `@${channel.username}` : null),
-      avatarUrl: details.avatarUrl ?? channel.avatarUrl,
+      avatarUrl:
+        channel.platform === 'facebook' || channel.platform === 'instagram' || channel.platform === 'threads'
+          ? `/api/channels/${channel.id}/avatar`
+          : (details.avatarUrl ?? channel.avatarUrl),
       bannerUrl: details.bannerUrl ?? null,
       subscriberCount: details.subscriberCount ?? null,
       viewCount: details.viewCount ?? null,
@@ -590,6 +835,10 @@ export class ChannelsService {
     platform: Platform,
     clientOrigin?: string,
   ): Promise<string> {
+    if (platform === 'whatsapp') {
+      const origin = this.resolveOrigin(clientOrigin, platform);
+      return `${origin}/settings?tab=whatsapp&scan=true`;
+    }
     const connector = this.connectors.get(platform);
     const state = randomToken(24);
     const pkce = connector.usesPkce ? createPkcePair() : undefined;
@@ -816,6 +1065,11 @@ export class ChannelsService {
       undefined,
       '/channels',
     );
+    if (this.storage && account.avatarUrl) {
+      this.mirrorAvatar(channel, account.avatarUrl).catch((err) =>
+        this.logger.warn(`Async avatar mirror failed for ${channel.id}: ${err.message}`),
+      );
+    }
     return toChannelDto(channel);
   }
 
@@ -826,6 +1080,13 @@ export class ChannelsService {
       include: { credential: true },
     });
     if (!channel) throw new NotFoundException();
+
+    if (channel.platform === 'whatsapp') {
+      await db.whatsappSession.updateMany({
+        where: { organizationId },
+        data: { status: 'DISCONNECTED', disconnectedAt: new Date() },
+      });
+    }
 
     if (channel.credential && this.connectors.has(channel.platform)) {
       try {
