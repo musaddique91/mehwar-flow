@@ -70,6 +70,9 @@ model Organization {
   customers     Customer[]
   customerGroups CustomerGroup[]
   whatsappSession WhatsappSession?
+  schedulerConfigs SchedulerConfig[]
+  schedulerRuns    SchedulerRun[]
+  orderInquiries   OrderInquiry[]
 
   @@map("organizations")
 }
@@ -133,6 +136,7 @@ model Channel {
   credential   ChannelCredential?
   postTargets  PostTarget[]
   metrics      MetricSnapshot[]
+  orderInquiries OrderInquiry[]
 
   @@unique([organizationId, platform, externalId])
   @@index([organizationId])
@@ -301,6 +305,8 @@ enum NotificationKind {
   POST_FAILED
   CHANNEL_NEEDS_RECONNECT
   CHANNEL_CONNECTED
+  ORDER_LEAD
+  COMMENT_ANALYSIS
   SYSTEM
 }
 
@@ -457,4 +463,113 @@ model WhatsappSession {
 
   @@map("whatsapp_sessions")
 }
+
+enum SchedulerType {
+  CHANNEL_LIVENESS
+  COMMENT_ANALYSIS
+  ORDER_DETECTION
+  CUSTOM
+}
+
+enum SchedulerStatus {
+  IDLE
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum InquiryPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  CLOSED
+  ARCHIVED
+}
+
+model SchedulerConfig {
+  id                 String          @id @default(uuid()) @db.Uuid
+  organizationId     String          @map("organization_id") @db.Uuid
+  type               SchedulerType
+  name               String
+  description        String?
+  enabled            Boolean         @default(true)
+  intervalMinutes    Int             @default(60) @map("interval_minutes")
+  /// Target channel IDs; empty array means all connected channels
+  channelIds         String[]        @default([]) @map("channel_ids")
+  options            Json?           @default("{}")
+  lastRunAt          DateTime?       @map("last_run_at")
+  nextRunAt          DateTime?       @map("next_run_at")
+  lastStatus         SchedulerStatus @default(IDLE) @map("last_status")
+  lastResultSummary  String?         @map("last_result_summary")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  runs               SchedulerRun[]
+
+  @@unique([organizationId, type])
+  @@index([organizationId, enabled])
+  @@map("scheduler_configs")
+}
+
+model SchedulerRun {
+  id                 String          @id @default(uuid()) @db.Uuid
+  organizationId     String          @map("organization_id") @db.Uuid
+  schedulerConfigId  String?         @map("scheduler_config_id") @db.Uuid
+  type               SchedulerType
+  status             SchedulerStatus
+  startedAt          DateTime        @default(now()) @map("started_at")
+  completedAt        DateTime?       @map("completed_at")
+  durationMs         Int?            @map("duration_ms")
+  itemsProcessed     Int             @default(0) @map("items_processed")
+  summary            String?
+  details            Json?           @default("{}")
+  errorMessage       String?         @map("error_message")
+
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  config             SchedulerConfig? @relation(fields: [schedulerConfigId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, startedAt])
+  @@index([organizationId, type])
+  @@map("scheduler_runs")
+}
+
+model OrderInquiry {
+  id                 String          @id @default(uuid()) @db.Uuid
+  organizationId     String          @map("organization_id") @db.Uuid
+  channelId          String?         @map("channel_id") @db.Uuid
+  platform           Platform
+  authorName         String          @map("author_name")
+  authorHandle       String?         @map("author_handle")
+  authorAvatarUrl    String?         @map("author_avatar_url")
+  commentText        String          @map("comment_text")
+  postOrVideoTitle   String?         @map("post_or_video_title")
+  postOrVideoUrl     String?         @map("post_or_video_url")
+  priority           InquiryPriority @default(HIGH)
+  intentCategory     String          @default("purchase_intent") @map("intent_category")
+  aiConfidence       Float?          @map("ai_confidence")
+  aiReasoning        String?         @map("ai_reasoning")
+  status             InquiryStatus   @default(NEW)
+  contactPhone       String?         @map("contact_phone")
+  notes              String?
+  detectedAt         DateTime        @default(now()) @map("detected_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel            Channel?        @relation(fields: [channelId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([organizationId, priority])
+  @@index([organizationId, detectedAt])
+  @@map("order_inquiries")
+}
+
 

@@ -10,6 +10,7 @@ export const MAINTENANCE_JOBS = {
   tokenRefreshScan: 'token-refresh-scan',
   scheduleSweep: 'schedule-sweep',
   metrics: 'metrics',
+  automationSweep: 'automation-sweep',
 } as const;
 
 export interface PublishJob {

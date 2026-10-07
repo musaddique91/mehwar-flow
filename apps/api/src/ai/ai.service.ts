@@ -820,14 +820,13 @@ export class AiService {
   async analyzeComments(
     organizationId: string,
     rawComments: Array<{ id?: string; authorName?: string; text: string; publishedAt?: string }>,
-    sampleIfEmpty = false,
     videoContext?: { title?: string; description?: string },
     userId?: string,
   ): Promise<CommentAnalysisResultDto> {
-    const list = rawComments.length > 0 ? rawComments : (sampleIfEmpty ? SAMPLE_COMMENTS : []);
+    const list = rawComments && rawComments.length > 0 ? rawComments : [];
     if (list.length === 0) {
       return {
-        summary: 'No comments to analyze. Load sample comments or check a video with active comments.',
+        summary: 'No live comments found on this channel to analyze.',
         dominantEmotion: 'neutral',
         counts: { happy: 0, excited: 0, angry: 0, sad: 0, question: 0, neutral: 0, total: 0 },
         comments: [],
@@ -976,68 +975,6 @@ Do not wrap in markdown or backticks. Return raw JSON only.`;
   }
 }
 
-export const SAMPLE_COMMENTS = [
-  {
-    id: 'sample-1',
-    authorName: 'Sarah Jenkins',
-    text: 'This video made my entire day! 😍 The explanation is so clear and beautiful. Thank you so much for sharing your talent!',
-    publishedAt: new Date(Date.now() - 3600_000 * 2).toISOString(),
-  },
-  {
-    id: 'sample-2',
-    authorName: 'Alex Rodriguez',
-    text: 'OMG I have been waiting for this tutorial all week! Absolutely blown away by the result! 🔥🙌',
-    publishedAt: new Date(Date.now() - 3600_000 * 5).toISOString(),
-  },
-  {
-    id: 'sample-3',
-    authorName: 'David K.',
-    text: 'Completely unwatchable. You skipped the most important step at 4:20 and the camera was totally blurry. Waste of time.',
-    publishedAt: new Date(Date.now() - 3600_000 * 12).toISOString(),
-  },
-  {
-    id: 'sample-4',
-    authorName: 'Emily Watson',
-    text: 'I tried following along but my project completely tore apart and fell over. Feeling so defeated and sad right now 😢',
-    publishedAt: new Date(Date.now() - 3600_000 * 18).toISOString(),
-  },
-  {
-    id: 'sample-5',
-    authorName: 'CreativeSoul99',
-    text: 'Could you please link the exact tools and colors you used in the description? Would love to buy the same set!',
-    publishedAt: new Date(Date.now() - 3600_000 * 24).toISOString(),
-  },
-  {
-    id: 'sample-6',
-    authorName: 'Marcus Chen',
-    text: 'Good tips overall. The intro was a bit long compared to your previous tutorials, but the second half was informative.',
-    publishedAt: new Date(Date.now() - 3600_000 * 36).toISOString(),
-  },
-  {
-    id: 'sample-7',
-    authorName: 'Hannah Lee',
-    text: 'I am so inspired by this! Going to try it this weekend with my daughter. Much love from Canada ❤️',
-    publishedAt: new Date(Date.now() - 3600_000 * 48).toISOString(),
-  },
-  {
-    id: 'sample-8',
-    authorName: 'Rob T.',
-    text: 'Why do you keep changing the schedule without telling your subscribers? Super frustrating.',
-    publishedAt: new Date(Date.now() - 3600_000 * 60).toISOString(),
-  },
-  {
-    id: 'sample-9',
-    authorName: 'DevPioneer',
-    text: 'Can you please make a follow-up video showing how to deploy this with Docker and CI/CD? That would be super helpful!',
-    publishedAt: new Date(Date.now() - 3600_000 * 72).toISOString(),
-  },
-  {
-    id: 'sample-10',
-    authorName: 'Chloe Bennet',
-    text: 'Could you make a video on the top beginner mistakes and how to fix them? Would love to see that!',
-    publishedAt: new Date(Date.now() - 3600_000 * 84).toISOString(),
-  },
-];
 
 function extractJson(raw: string): any {
   const trimmed = raw.trim();

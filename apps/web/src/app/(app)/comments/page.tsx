@@ -22,13 +22,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { PLATFORM_RULES, type ChannelDto, type Platform, VideoSuggestionDto } from '@mehwar/shared';
 import { FadeIn } from '@/components/motion';
 import { Button, Card, Modal, Skeleton } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { useApi } from '@/lib/hooks';
+import { cn } from '@/lib/cn';
 import { PlatformIcon, PLATFORM_BRAND } from '@/lib/platforms';
 
 interface AggregatedComment {
@@ -64,7 +64,10 @@ interface AggregatedComment {
 interface CommentsApiResponse {
   channels: ChannelDto[];
   comments: AggregatedComment[];
-  isSample: boolean;
+  total?: number;
+  page?: number;
+  limit?: number;
+  hasMore?: boolean;
 }
 
 interface AiCommentAnalysis {
@@ -123,8 +126,94 @@ export default function CommentsPage() {
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisResult | null>(null);
   const [analyzingComments, setAnalyzingComments] = useState(false);
 
-  // Local comments list override for optimistic updates
-  const [localComments, setLocalComments] = useState<AggregatedComment[] | null>(null);
+  // Comments, channels and pagination state
+  const [channels, setChannels] = useState<ChannelDto[]>([]);
+  const [comments, setComments] = useState<AggregatedComment[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalComments, setTotalComments] = useState(0);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Progressive comments fetching with server-side pagination & Redis cache
+  const fetchComments = useCallback(
+    async (targetPage: number, isRefresh = false) => {
+      if (targetPage === 1) {
+        if (isRefresh) setIsRefreshing(true);
+        else setInitialLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      try {
+        const params = new URLSearchParams();
+        if (selectedChannelId !== 'all') params.set('channelId', selectedChannelId);
+        if (platformFilter !== 'all') params.set('platform', platformFilter);
+        params.set('page', String(targetPage));
+        params.set('limit', '20');
+        if (isRefresh) params.set('refresh', 'true');
+
+        const res = await api<CommentsApiResponse>(`/channels/all-comments?${params.toString()}`);
+        if (res.channels) setChannels(res.channels);
+
+        setComments((prev) => {
+          if (targetPage === 1 || isRefresh) {
+            return res.comments;
+          }
+          const existingIds = new Set(prev.map((c) => c.id));
+          const newItems = res.comments.filter((c) => !existingIds.has(c.id));
+          return [...prev, ...newItems];
+        });
+
+        setPage(targetPage);
+        setHasMore(res.hasMore ?? false);
+        setTotalComments(res.total ?? res.comments.length);
+      } catch (err) {
+        toast.error((err as ApiError).message || 'Failed to load comments');
+      } finally {
+        setInitialLoading(false);
+        setLoadingMore(false);
+        setIsRefreshing(false);
+      }
+    },
+    [selectedChannelId, platformFilter],
+  );
+
+  // Fetch initial page on mount or filter change
+  useEffect(() => {
+    fetchComments(1);
+  }, [fetchComments]);
+
+  // Load next page
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore || initialLoading) return;
+    fetchComments(page + 1);
+  }, [loadingMore, hasMore, initialLoading, page, fetchComments]);
+
+  // Sentinel ref for infinite scroll
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!hasMore || loadingMore || initialLoading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMore();
+        }
+      },
+      { rootMargin: '250px' },
+    );
+
+    const el = sentinelRef.current;
+    if (el) observer.observe(el);
+
+    return () => {
+      if (el) observer.unobserve(el);
+      observer.disconnect();
+    };
+  }, [hasMore, loadingMore, initialLoading, loadMore]);
 
   async function copyVideoPlan(sug: VideoSuggestionDto) {
     const outlineText = sug.outline.map((pt, i) => `${i + 1}. ${pt}`).join('\n');
@@ -172,28 +261,13 @@ What questions do you have? Drop them below! 👇`;
     toast.success('Opening composer with video announcement draft!');
   }
 
-  const queryUrl =
-    selectedChannelId === 'all'
-      ? '/channels/all-comments'
-      : `/channels/all-comments?channelId=${selectedChannelId}`;
-
-  const { data, loading, error, refetch } = useApi<CommentsApiResponse>(queryUrl, [
-    'comments',
-  ]);
-
-  const activeComments = localComments ?? data?.comments ?? [];
-  const channels = data?.channels ?? [];
-
-  // Reset local list when remote data changes
-  const commentsToDisplay = localComments ?? data?.comments ?? [];
-
   const analyzedMap = useMemo(() => {
     return new Map((aiAnalysis?.comments ?? []).map((ac) => [ac.id, ac]));
   }, [aiAnalysis]);
 
   // Filtering
   const filteredComments = useMemo(() => {
-    return commentsToDisplay.filter((c) => {
+    return comments.filter((c) => {
       // Channel filter
       if (selectedChannelId !== 'all' && c.channelId !== selectedChannelId) return false;
 
@@ -217,17 +291,17 @@ What questions do you have? Drop them below! 👇`;
 
       return true;
     });
-  }, [commentsToDisplay, selectedChannelId, platformFilter, selectedEmotion, searchQuery, analyzedMap]);
+  }, [comments, selectedChannelId, platformFilter, selectedEmotion, searchQuery, analyzedMap]);
 
   async function runAiAnalysis() {
     if (analyzingComments) return;
-    if (commentsToDisplay.length === 0) {
+    if (comments.length === 0) {
       toast.info('No comments found to analyze.');
       return;
     }
     setAnalyzingComments(true);
     try {
-      const payload = commentsToDisplay.map((c) => ({
+      const payload = comments.map((c) => ({
         id: c.id,
         authorName: c.authorName,
         text: c.text,
@@ -236,7 +310,7 @@ What questions do you have? Drop them below! 👇`;
 
       const res = await api<AiAnalysisResult>('/ai/analyze-comments', {
         method: 'POST',
-        json: { comments: payload, sampleIfEmpty: false },
+        json: { comments: payload },
       });
 
       setAiAnalysis(res);
@@ -261,23 +335,24 @@ What questions do you have? Drop them below! 👇`;
       });
 
       // Optimistically add reply
-      const updated = commentsToDisplay.map((c) => {
-        if (c.id === comment.id) {
-          const newReplies = [
-            ...(c.replies ?? []),
-            {
-              id: `temp-${Date.now()}`,
-              authorName: 'You',
-              text: replyText.trim(),
-              publishedAt: new Date().toISOString(),
-            },
-          ];
-          return { ...c, replies: newReplies, replyCount: newReplies.length };
-        }
-        return c;
-      });
+      setComments((prev) =>
+        prev.map((c) => {
+          if (c.id === comment.id) {
+            const newReplies = [
+              ...(c.replies ?? []),
+              {
+                id: `temp-${Date.now()}`,
+                authorName: 'You',
+                text: replyText.trim(),
+                publishedAt: new Date().toISOString(),
+              },
+            ];
+            return { ...c, replies: newReplies, replyCount: newReplies.length };
+          }
+          return c;
+        }),
+      );
 
-      setLocalComments(updated);
       setReplyingToId(null);
       setReplyText('');
       toast.success('Reply sent successfully!');
@@ -297,7 +372,8 @@ What questions do you have? Drop them below! 👇`;
         `/channels/${comment.channelId}/videos/${comment.video.id}/comments/${comment.id}`,
         { method: 'DELETE' },
       );
-      setLocalComments((prev) => (prev ?? commentsToDisplay).filter((c) => c.id !== comment.id));
+      setComments((prev) => prev.filter((c) => c.id !== comment.id));
+      setTotalComments((prev) => Math.max(0, prev - 1));
       toast.success('Comment deleted');
     } catch (err) {
       toast.error((err as ApiError).message || 'Failed to delete comment');
@@ -350,13 +426,11 @@ What questions do you have? Drop them below! 👇`;
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setLocalComments(null);
-                refetch();
-              }}
+              onClick={() => fetchComments(1, true)}
+              loading={isRefreshing}
               className="gap-1.5"
             >
-              <RefreshCw className="size-3.5" />
+              <RefreshCw className={cn('size-3.5', isRefreshing && 'animate-spin')} />
               Refresh
             </Button>
           </div>
@@ -556,7 +630,7 @@ What questions do you have? Drop them below! 👇`;
                 All
               </button>
               {(['youtube', 'x', 'facebook', 'instagram'] as Platform[]).map((p) => {
-                const count = commentsToDisplay.filter((c) => c.platform === p).length;
+                const count = comments.filter((c) => c.platform === p).length;
                 return (
                   <button
                     key={p}
@@ -608,7 +682,7 @@ What questions do you have? Drop them below! 👇`;
         <div className="flex items-center justify-between border-t border-line/60 pt-2 text-[11px] text-muted">
           <span>
             Showing <strong className="text-fg">{filteredComments.length}</strong> of{' '}
-            <strong className="text-fg">{commentsToDisplay.length}</strong> real comments
+            <strong className="text-fg">{totalComments}</strong> real comments from channels
           </span>
           <span className="flex items-center gap-1.5 text-xs text-muted">
             <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -619,13 +693,13 @@ What questions do you have? Drop them below! 👇`;
 
       {/* Comments List */}
       <div className="space-y-4">
-        {loading && !data ? (
+        {initialLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-28 w-full rounded-2xl" />
             <Skeleton className="h-28 w-full rounded-2xl" />
             <Skeleton className="h-28 w-full rounded-2xl" />
           </div>
-        ) : commentsToDisplay.length === 0 ? (
+        ) : comments.length === 0 ? (
           <Card className="flex flex-col items-center justify-center p-12 text-center">
             <div className="flex size-14 items-center justify-center rounded-2xl bg-fuchsia-500/10 text-fuchsia-500 border border-fuchsia-500/20">
               <MessageSquare className="size-7" />
@@ -637,13 +711,11 @@ What questions do you have? Drop them below! 👇`;
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setLocalComments(null);
-                refetch();
-              }}
+              onClick={() => fetchComments(1, true)}
+              loading={isRefreshing}
               className="mt-4 gap-1.5 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/10"
             >
-              <RefreshCw className="size-3.5" />
+              <RefreshCw className={cn('size-3.5', isRefreshing && 'animate-spin')} />
               Check for New Comments
             </Button>
           </Card>
@@ -941,6 +1013,35 @@ What questions do you have? Drop them below! 👇`;
               </Card>
             );
           })
+        )}
+
+        {/* Infinite Scroll Sentinel & Load More Controls */}
+        {filteredComments.length > 0 && (
+          <div ref={sentinelRef} className="py-6 flex flex-col items-center justify-center gap-3">
+            {loadingMore && (
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted bg-card px-4 py-2 rounded-full border border-line shadow-xs">
+                <RefreshCw className="size-3.5 animate-spin text-fuchsia-500" />
+                <span>Loading more comments...</span>
+              </div>
+            )}
+
+            {hasMore && !loadingMore && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadMore}
+                className="rounded-full px-5 text-xs font-semibold hover:border-fuchsia-500/50"
+              >
+                Load More Comments ({comments.length} of {totalComments})
+              </Button>
+            )}
+
+            {!hasMore && comments.length > 0 && (
+              <p className="text-[11px] text-muted/70 flex items-center gap-1.5">
+                <span>✨</span> You have reached the end of loaded comments ({comments.length} of {totalComments} total)
+              </p>
+            )}
+          </div>
         )}
       </div>
 

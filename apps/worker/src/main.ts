@@ -17,6 +17,7 @@ import { collectMetrics } from './jobs/metrics';
 import { publishTarget } from './jobs/publish';
 import { findDueTargets } from './jobs/schedule-sweep';
 import { findCredentialsDueForRefresh, refreshChannelToken } from './jobs/token-refresh';
+import { sweepAutomations } from './jobs/automation';
 import { DefaultNotifier } from './notifier';
 
 function log(msg: string, extra?: Record<string, unknown>) {
@@ -62,6 +63,7 @@ async function main() {
   });
   await maintenance.upsertJobScheduler(MAINTENANCE_JOBS.scheduleSweep, { pattern: '* * * * *' });
   await maintenance.upsertJobScheduler(MAINTENANCE_JOBS.metrics, { pattern: '17 3 * * *' });
+  await maintenance.upsertJobScheduler(MAINTENANCE_JOBS.automationSweep, { pattern: '*/2 * * * *' });
 
   const workers = [
     new Worker<PublishJob>(
@@ -141,6 +143,8 @@ async function main() {
           }
           case MAINTENANCE_JOBS.metrics:
             return collectMetrics(deps);
+          case MAINTENANCE_JOBS.automationSweep:
+            return sweepAutomations(deps);
           default:
             throw new Error(`Unknown maintenance job ${job.name}`);
         }

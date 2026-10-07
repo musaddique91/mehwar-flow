@@ -95,6 +95,8 @@ export interface SharePostResultDto {
   emailsFailed: number;
   whatsappSent: number;
   whatsappFailed: number;
+  /** Messages handed to the paced background sender; the outcome arrives as a notification. */
+  whatsappQueued?: number;
   whatsappFallbackLinks?: WhatsAppFallbackLink[];
   message: string;
 }

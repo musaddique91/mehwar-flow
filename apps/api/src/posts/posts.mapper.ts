@@ -30,6 +30,7 @@ export async function toPostDto(p: PostWithRelations, storage: Storage | null): 
       textOverride: t.textOverride,
       options: (t.options ?? {}) as TargetOptions,
       status: t.status,
+      externalId: t.externalId,
       externalUrl: t.externalUrl,
       lastError: t.lastError,
       publishedAt: t.publishedAt?.toISOString() ?? null,

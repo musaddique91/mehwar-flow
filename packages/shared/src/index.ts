@@ -6,3 +6,4 @@ export * from './posts';
 export * from './plans';
 export * from './queues';
 export * from './customers';
+export * from './automation';

@@ -149,7 +149,6 @@ export class AiController {
     @Body()
     body: {
       comments?: Array<{ id?: string; authorName?: string; text: string; publishedAt?: string }>;
-      sampleIfEmpty?: boolean;
       videoTitle?: string;
       videoDescription?: string;
     },
@@ -157,7 +156,6 @@ export class AiController {
     return this.ai.analyzeComments(
       auth.organizationId,
       body.comments ?? [],
-      body.sampleIfEmpty ?? false,
       { title: body.videoTitle, description: body.videoDescription },
       auth.userId,
     );

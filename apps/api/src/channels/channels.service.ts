@@ -601,10 +601,12 @@ export class ChannelsService {
 
     const accessToken = await this.getValidAccessToken(organizationId, channel);
 
-    return connector.replyToComment(
+    const res = await connector.replyToComment(
       { videoId, parentId: body.parentId, text: body.text },
       accessToken,
     );
+    await this.invalidateCommentsCache(organizationId);
+    return res;
   }
 
   async likePost(organizationId: string, channelId: string, postId: string) {
@@ -635,6 +637,17 @@ export class ChannelsService {
     return connector.retweetPost(postId, accessToken);
   }
 
+  private async invalidateCommentsCache(organizationId: string) {
+    try {
+      const keys = await this.redis.keys(`comments:cache:${organizationId}:*`);
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to clear comments cache: ${(err as Error).message}`);
+    }
+  }
+
   async deleteComment(
     organizationId: string,
     channelId: string,
@@ -651,10 +664,52 @@ export class ChannelsService {
       throw new BadRequestException(`Deleting comments is not supported for ${channel.platform}`);
     }
     const accessToken = await this.getValidAccessToken(organizationId, channel);
-    return connector.deleteComment(commentId, accessToken);
+    const res = await connector.deleteComment(commentId, accessToken);
+    await this.invalidateCommentsCache(organizationId);
+    return res;
   }
 
-  async getAllComments(organizationId: string, channelId?: string, _sampleIfEmpty = false) {
+  async getAllComments(
+    organizationId: string,
+    channelId?: string,
+    options: {
+      page?: number;
+      limit?: number;
+      platform?: string;
+      refresh?: boolean;
+    } = {},
+  ) {
+    const page = Math.max(1, options.page ?? 1);
+    const limit = Math.max(1, Math.min(100, options.limit ?? 20));
+    const cacheKey = `comments:cache:${organizationId}:${channelId ?? 'all'}`;
+
+    // 1. Check Redis cache first if not explicitly refreshing
+    if (!options.refresh) {
+      try {
+        const cached = await this.redis.get(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          let comments = parsed.comments || [];
+          if (options.platform && options.platform !== 'all') {
+            comments = comments.filter((c: any) => c.platform === options.platform);
+          }
+          const total = comments.length;
+          const start = (page - 1) * limit;
+          const pageSlice = comments.slice(start, start + limit);
+          return {
+            channels: parsed.channels,
+            comments: pageSlice,
+            total,
+            page,
+            limit,
+            hasMore: start + limit < total,
+          };
+        }
+      } catch (err) {
+        this.logger.warn(`Redis comments cache read failed: ${(err as Error).message}`);
+      }
+    }
+
     const where: any = { status: { not: 'DISCONNECTED' } };
     if (channelId) where.id = channelId;
 
@@ -717,7 +772,7 @@ export class ChannelsService {
             }
           }
 
-          // Combine remote videos/posts with local published post targets
+          // Combine remote videos/posts with local published post targets (limit to 10 most recent)
           const videos: Array<{
             id: string;
             title?: string;
@@ -726,7 +781,7 @@ export class ChannelsService {
             thumbnailUrl?: string | null;
             url?: string;
             publishedAt?: string;
-          }> = [...(details?.videos ?? []).slice(0, 25)];
+          }> = [...(details?.videos ?? []).slice(0, 10)];
 
           try {
             const localTargets = await this.prisma.tenant(organizationId).postTarget.findMany({
@@ -746,7 +801,7 @@ export class ChannelsService {
                 },
               },
               orderBy: { createdAt: 'desc' },
-              take: 10,
+              take: 5,
             });
 
             for (const lt of localTargets) {
@@ -822,10 +877,39 @@ export class ChannelsService {
       return tb - ta;
     });
 
+    const channelDtos = channels.map(toChannelDto);
+
+    // Cache full aggregated list for 3 minutes (180s)
+    try {
+      await this.redis.set(
+        cacheKey,
+        JSON.stringify({
+          channels: channelDtos,
+          comments: allComments,
+        }),
+        'EX',
+        180,
+      );
+    } catch (err) {
+      this.logger.warn(`Redis comments cache write failed: ${(err as Error).message}`);
+    }
+
+    let filtered = allComments;
+    if (options.platform && options.platform !== 'all') {
+      filtered = filtered.filter((c: any) => c.platform === options.platform);
+    }
+
+    const total = filtered.length;
+    const start = (page - 1) * limit;
+    const pageSlice = filtered.slice(start, start + limit);
+
     return {
-      channels: channels.map(toChannelDto),
-      comments: allComments,
-      isSample: false,
+      channels: channelDtos,
+      comments: pageSlice,
+      total,
+      page,
+      limit,
+      hasMore: start + limit < total,
     };
   }
 

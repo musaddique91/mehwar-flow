@@ -273,10 +273,10 @@ importers:
       '@prisma/client':
         specifier: ^6.19.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
-    devDependencies:
       prisma:
         specifier: ^6.19.0
         version: 6.19.3(typescript@5.9.3)
+    devDependencies:
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.6.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)

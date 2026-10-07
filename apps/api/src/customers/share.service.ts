@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PLATFORM_RULES, type Platform, type SharePostInput, type SharePostResultDto, type WhatsAppFallbackLink } from '@mehwar/shared';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { WhatsAppService } from '../whatsapp/whatsapp.service';
+import { WHATSAPP_SEND_GAP_MS, WhatsAppService } from '../whatsapp/whatsapp.service';
 import { formatWhatsAppMessage, renderCustomerShareEmail, type PlatformLink } from './email-template';
 import { MailerService } from './mailer.service';
 
@@ -13,6 +14,7 @@ export class ShareService {
     private readonly prisma: PrismaService,
     private readonly mailer: MailerService,
     private readonly whatsapp: WhatsAppService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async sharePostToCustomers(organizationId: string, input: SharePostInput): Promise<SharePostResultDto> {
@@ -129,27 +131,32 @@ export class ShareService {
       }
     }
 
-    // 4. Dispatch WhatsApp
+    // 4. Dispatch WhatsApp. WhatsApp Web blocks bursts, so messages go out one at a time with a
+    // gap (paced inside WhatsAppService). That can take minutes, so when the client is connected
+    // the batch runs in the background and the result arrives as a notification.
+    let whatsappQueued = 0;
     if (sendWhatsApp) {
+      const outgoing: { customer: (typeof customers)[number]; phone: string; message: string }[] = [];
       for (const customer of customers) {
         const phone = customer.whatsappNumber || customer.mobileNumber;
         if (!phone) {
           whatsappFailed++;
           continue;
         }
-
         const message = formatWhatsAppMessage({
           customerName: customer.name,
           postText: post.text,
           customMessage: input.customMessage || undefined,
           links: platformLinks,
         });
+        outgoing.push({ customer, phone, message });
+      }
 
-        try {
-          await this.whatsapp.sendTextMessage(phone, message);
-          whatsappSent++;
-        } catch (err) {
-          this.logger.warn(`Automated WhatsApp send failed for ${customer.name} (${phone}): ${err}`);
+      if (this.whatsapp.isConnected()) {
+        whatsappQueued = outgoing.length;
+        void this.sendWhatsAppBatch(organizationId, outgoing);
+      } else {
+        for (const { customer, phone, message } of outgoing) {
           whatsappFailed++;
           whatsappFallbackLinks.push({
             customerId: customer.id,
@@ -161,6 +168,12 @@ export class ShareService {
       }
     }
 
+    const etaSec = Math.ceil((whatsappQueued * WHATSAPP_SEND_GAP_MS) / 1000);
+    const queuedNote =
+      whatsappQueued > 0
+        ? ` ${whatsappQueued} WhatsApp message${whatsappQueued === 1 ? '' : 's'} sending one every ${WHATSAPP_SEND_GAP_MS / 1000}s (about ${etaSec < 60 ? `${etaSec}s` : `${Math.ceil(etaSec / 60)} min`}); you'll get a notification when done.`
+        : '';
+
     return {
       success: true,
       recipientCount: customers.length,
@@ -168,8 +181,33 @@ export class ShareService {
       emailsFailed,
       whatsappSent,
       whatsappFailed,
+      whatsappQueued,
       whatsappFallbackLinks: whatsappFallbackLinks.length > 0 ? whatsappFallbackLinks : undefined,
-      message: `Shared with ${customers.length} recipient${customers.length === 1 ? '' : 's'}.`,
+      message: `Shared with ${customers.length} recipient${customers.length === 1 ? '' : 's'}.${queuedNote}`,
     };
+  }
+
+  private async sendWhatsAppBatch(
+    organizationId: string,
+    outgoing: { customer: { name: string }; phone: string; message: string }[],
+  ): Promise<void> {
+    let sent = 0;
+    const failed: string[] = [];
+    for (const { customer, phone, message } of outgoing) {
+      try {
+        await this.whatsapp.sendTextMessage(phone, message);
+        sent++;
+      } catch (err) {
+        this.logger.warn(`WhatsApp send failed for ${customer.name} (${phone}): ${err}`);
+        failed.push(customer.name);
+      }
+    }
+    const body =
+      failed.length === 0
+        ? `All ${sent} message${sent === 1 ? '' : 's'} delivered.`
+        : `${sent} sent, ${failed.length} failed: ${failed.slice(0, 10).join(', ')}${failed.length > 10 ? '…' : ''}`;
+    await this.notifications
+      .notify(organizationId, 'SYSTEM', 'WhatsApp sharing finished', body, '/users')
+      .catch((err) => this.logger.warn(`Could not post WhatsApp share notification: ${err}`));
   }
 }

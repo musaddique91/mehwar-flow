@@ -15,7 +15,9 @@ import {
   FilePen,
   Filter,
   Loader2,
+  MessageCircle,
   Pencil,
+  Play,
   Plus,
   RotateCcw,
   Share2,
@@ -549,8 +551,24 @@ function CrossPostDialog({
   );
 }
 
-function PostMenu({ post, onEdit }: { post: PostDto; onEdit: (p: PostDto) => void }) {
-  const [open, setOpen] = useState(false);
+function PostMenu({
+  post,
+  onEdit,
+  open: externalOpen,
+  onOpenChange,
+}: {
+  post: PostDto;
+  onEdit: (p: PostDto) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = (val: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof val === 'function' ? val(open) : val;
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [crossPostOpen, setCrossPostOpen] = useState(false);
   const [shareCustomersOpen, setShareCustomersOpen] = useState(false);
@@ -615,7 +633,7 @@ function PostMenu({ post, onEdit }: { post: PostDto; onEdit: (p: PostDto) => voi
 
   return (
     <>
-      <div ref={ref} className="relative">
+      <div ref={ref} className="relative z-50">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -634,7 +652,7 @@ function PostMenu({ post, onEdit }: { post: PostDto; onEdit: (p: PostDto) => voi
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.94, y: -6 }}
               transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-              className="glass absolute right-0 top-9 z-30 w-60 rounded-2xl bg-card-strong p-1.5 shadow-2xl border border-line backdrop-blur-2xl"
+              className="absolute right-0 top-9 z-50 w-60 rounded-2xl bg-white dark:bg-[#141424] p-1.5 shadow-2xl border border-line ring-1 ring-black/5 dark:ring-white/10"
             >
               {/* 0. "Share to Customers" — on the very first before share to platform */}
               {canShareToCustomers && (
@@ -782,6 +800,7 @@ export function PostCard({
   timezone: string;
   onEdit: (p: PostDto) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const when = post.scheduledAt
     ? new Date(post.scheduledAt).toLocaleString(undefined, {
         timeZone: timezone,
@@ -790,14 +809,18 @@ export function PostCard({
       })
     : null;
   const thumbs = post.media.filter((m) => m.thumbnailUrl).slice(0, 4);
+  const hasVideo = post.media.some((m) => m.kind === 'video');
+  const detailHref = `/posts/${post.id}`;
   return (
     <Card
       id={`post-${post.id}`}
-      layout
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
-      className="space-y-3 transition-all duration-300"
+      className={cn(
+        'space-y-3 transition-all duration-300 relative',
+        menuOpen ? 'z-40' : 'z-0',
+      )}
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
@@ -813,12 +836,14 @@ export function PostCard({
             {post.text || <span className="italic text-muted">No text</span>}
           </p>
         </div>
-        <PostMenu post={post} onEdit={onEdit} />
+        <PostMenu post={post} onEdit={onEdit} open={menuOpen} onOpenChange={setMenuOpen} />
       </div>
       {thumbs.length > 0 && (
-        <div
+        <Link
+          href={detailHref}
+          aria-label={hasVideo ? 'Play video and see comments' : 'Open post and see comments'}
           className={cn(
-            'grid gap-1.5 overflow-hidden rounded-2xl',
+            'group relative grid gap-1.5 overflow-hidden rounded-2xl',
             thumbs.length > 1 ? 'grid-cols-2' : 'grid-cols-1',
           )}
         >
@@ -828,17 +853,24 @@ export function PostCard({
               key={m.id}
               src={m.thumbnailUrl!}
               alt={m.fileName}
-              className="max-h-64 w-full object-cover"
+              loading="lazy"
+              className="max-h-64 w-full object-cover transition group-hover:brightness-90"
             />
           ))}
-        </div>
+          {hasVideo && (
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="flex size-14 items-center justify-center rounded-full bg-black/55 text-white shadow-xl backdrop-blur-sm transition group-hover:scale-110">
+                <Play className="ml-0.5 size-6 fill-current" />
+              </span>
+            </span>
+          )}
+        </Link>
       )}
       <div className="flex flex-wrap gap-1.5">
         {post.targets.map((t) => {
           const s = TARGET_STYLE[t.status];
           const chip = (
             <motion.span
-              layout
               key={t.status}
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -875,6 +907,13 @@ export function PostCard({
             ))}
         </div>
       )}
+      <Link
+        href={detailHref}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-fuchsia-600 hover:underline dark:text-fuchsia-300"
+      >
+        <MessageCircle className="size-3.5" />
+        View post & comments
+      </Link>
     </Card>
   );
 }
@@ -964,7 +1003,7 @@ export function FeedFilters({
                 initial={{ opacity: 0, scale: 0.95, y: -4 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                className="glass absolute left-0 top-9 z-30 max-h-60 w-56 overflow-y-auto rounded-2xl bg-card-strong p-1.5 shadow-2xl border border-line"
+                className="absolute left-0 top-9 z-50 max-h-60 w-56 overflow-y-auto rounded-2xl bg-white dark:bg-[#141424] p-1.5 shadow-2xl border border-line ring-1 ring-black/5 dark:ring-white/10"
               >
                 <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted">
                   Filter Feed by Channel

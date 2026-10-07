@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type { AuthResponse, LoginInput, UserDto } from '@mehwar/shared';
 import { api, getAccessToken, refreshSession, setAccessToken } from './api';
+import { clearApiCache } from './hooks';
 
 interface AuthState {
   user: UserDto | null;
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const accept = useCallback((res: AuthResponse) => {
+    clearApiCache();
     setAccessToken(res.accessToken);
     setUser(res.user);
   }, []);
@@ -69,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
         setAccessToken(null);
+        clearApiCache();
         setUser(null);
       },
     }),

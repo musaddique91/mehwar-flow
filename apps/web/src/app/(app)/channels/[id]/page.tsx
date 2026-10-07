@@ -143,8 +143,12 @@ export default function ChannelDetailsPage({ params }: { params: Promise<{ id: s
   const channel = channels.data?.find((c) => c.id === id);
   const data = details.data;
 
-  async function runAiAnalysis(sampleIfEmpty = false) {
+  async function runAiAnalysis() {
     if (analyzingComments || !selectedVideo) return;
+    if (commentsList.length === 0) {
+      toast.info('No live comments found on this post to analyze.');
+      return;
+    }
     setAnalyzingComments(true);
     try {
       const payloadComments = commentsList.map((c) => ({
@@ -158,7 +162,6 @@ export default function ChannelDetailsPage({ params }: { params: Promise<{ id: s
         method: 'POST',
         json: {
           comments: payloadComments,
-          sampleIfEmpty,
           videoTitle: selectedVideo.title,
           videoDescription: selectedVideo.description,
         },
@@ -169,24 +172,9 @@ export default function ChannelDetailsPage({ params }: { params: Promise<{ id: s
         setActiveAiTab('suggestions');
       }
 
-      // If sample comments were loaded and commentsList was empty, populate commentsList as well
-      if (commentsList.length === 0 && res.comments && res.comments.length > 0) {
-        setCommentsList(
-          res.comments.map((rc: any) => ({
-            id: rc.id,
-            authorName: rc.authorName,
-            authorAvatarUrl: null,
-            text: rc.text,
-            publishedAt: rc.publishedAt || new Date().toISOString(),
-            likeCount: Math.floor(Math.random() * 20) + 1,
-            replyCount: 0,
-            replies: [],
-          })),
-        );
-      }
       toast.success(
         res.videoSuggestions && res.videoSuggestions.length > 0
-          ? `Analyzed with NVIDIA AI! Found ${res.videoSuggestions.length} next video ideas from fan requests.`
+          ? `Analyzed with NVIDIA AI! Found ${res.videoSuggestions.length} next video ideas from viewer requests.`
           : `Comments categorized by emotion with NVIDIA AI!`,
       );
     } catch (err) {
@@ -901,22 +889,11 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                         size="sm"
                         variant="secondary"
                         loading={analyzingComments}
-                        onClick={() => runAiAnalysis(false)}
+                        onClick={() => runAiAnalysis()}
                         className="text-xs h-7 px-2.5"
                       >
                         <Sparkles className="size-3 text-emerald-500" />
-                        Analyze Comments
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        loading={analyzingComments}
-                        onClick={() => runAiAnalysis(true)}
-                        className="text-xs h-7 px-2.5 text-muted hover:text-fg border border-line/60"
-                        title="Load test comments with happy, angry, sad, excited and question examples"
-                      >
-                        Load Test Samples
+                        Analyze Live Comments
                       </Button>
                     </div>
                   </div>
@@ -927,7 +904,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                       <div>
                         <p className="font-semibold text-fg text-[11px]">Need inspiration for your next video?</p>
                         <p className="text-[10px] mt-0.5 text-muted leading-relaxed">
-                          Click <b className="text-fg">"Analyze Comments"</b> or <b className="text-fg">"Load Test Samples"</b>. NVIDIA AI will categorize audience sentiments and automatically detect fan questions, struggles, and requests to suggest high-impact video ideas.
+                          Click <b className="text-fg">"Analyze Live Comments"</b>. NVIDIA AI will categorize audience sentiments directly from your live post comments and detect viewer questions, struggles, and requests to suggest high-impact video ideas.
                         </p>
                       </div>
                     </div>

@@ -156,6 +156,18 @@ export function WhatsAppModal({ open, onClose }: { open: boolean; onClose: () =>
               </Button>
             </div>
           </div>
+        ) : loading || (status.status === 'SCAN_QR_CODE' && !status.qrCodeDataUrl) ? (
+          <div className="space-y-4 py-8">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500 ring-8 ring-emerald-500/10">
+              <Loader2 className="size-7 animate-spin text-emerald-500" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-fg">Initializing WhatsApp...</h3>
+              <p className="text-xs text-muted mt-1 max-w-xs mx-auto">
+                Launching secure browser session and generating your QR code. Please wait a moment...
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4 py-8">
             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500">

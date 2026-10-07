@@ -117,6 +117,8 @@ export interface PostTargetDto {
   textOverride: string | null;
   options: TargetOptions;
   status: TargetStatusDto;
+  /** The network's own id for the published post (video id, tweet id, media id…). */
+  externalId: string | null;
   externalUrl: string | null;
   lastError: string | null;
   publishedAt: string | null;

@@ -2,6 +2,14 @@ import 'reflect-metadata';
 import { createApp } from './bootstrap';
 import { loadConfig } from './config';
 
+process.on('unhandledRejection', (reason, promise) => {
+  console.warn('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
 async function main() {
   const config = loadConfig();
   const app = await createApp(config);

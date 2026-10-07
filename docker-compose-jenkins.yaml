@@ -1,7 +1,8 @@
 # Deployed by common-jenkins-pipeline (resources/deployments/mehwar-flow/<env>/pipeline-config.yml).
 # Every ${VAR} comes from the .env the pipeline writes; do not run this file locally (use docker-compose.yml).
 #
-# One image (${APP_IMAGE_TAG}, the Dockerfile's default `app` stage) runs every process.
+# One slim image per process, built and shipped by scripts/deploy-server.sh (Dockerfile targets):
+#   ${API_IMAGE_TAG} (api + migrations), ${WORKER_IMAGE_TAG}, ${WEB_IMAGE_TAG}.
 # Postgres (`postgres`) and MinIO (`minio`) are the shared containers on mvx_shared_network.
 # Already provisioned on the server: DB mehwar_flow (owner mehwar_owner, runtime role mehwar_app),
 # MinIO bucket mehwar-flow-dev-media with user mehwar-flow-dev-app scoped to it.
@@ -45,7 +46,7 @@ x-app-env: &app-env
 services:
   # Schema migrations as the database owner; api and worker wait for it on every deploy.
   mehwar-flow-migrate:
-    image: ${APP_IMAGE_TAG}
+    image: ${API_IMAGE_TAG}
     container_name: mehwar-flow-migrate
     working_dir: /app/packages/db
     command: ['./node_modules/.bin/prisma', 'migrate', 'deploy']
@@ -74,7 +75,7 @@ services:
     restart: always
 
   __BACKEND_CONTAINER_NAME__:
-    image: ${APP_IMAGE_TAG}
+    image: ${API_IMAGE_TAG}
     container_name: ${BACKEND_CONTAINER_NAME}
     working_dir: /app/apps/api
     command: ['node', 'dist/main.js']
@@ -131,7 +132,7 @@ services:
     restart: always
 
   mehwar-flow-worker:
-    image: ${APP_IMAGE_TAG}
+    image: ${WORKER_IMAGE_TAG}
     container_name: mehwar-flow-worker
     working_dir: /app/apps/worker
     command: ['node', 'dist/main.js']
@@ -158,9 +159,9 @@ services:
 
   # Only on the private network, so `api` cannot resolve to another project's container.
   __FRONTEND_CONTAINER_NAME__:
-    image: ${APP_IMAGE_TAG}
+    image: ${WEB_IMAGE_TAG}
     container_name: ${FRONTEND_CONTAINER_NAME}
-    working_dir: /app/apps/web/.next/standalone
+    working_dir: /app
     command: ['node', 'apps/web/server.js']
     environment:
       NODE_ENV: production

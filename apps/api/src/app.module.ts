@@ -25,6 +25,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UsersController } from './users/users.controller';
 import { VaultModule } from './vault/vault.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { AutomationController } from './automation/automation.controller';
+import { AutomationService } from './automation/automation.service';
 import { CustomersModule } from './customers/customers.module';
 
 @Module({})
@@ -61,6 +63,7 @@ export class AppModule {
         AnalyticsController,
         AiController,
         BillingController,
+        AutomationController,
       ],
       providers: [
         { provide: APP_GUARD, useClass: ThrottlerGuard },
@@ -72,6 +75,7 @@ export class AppModule {
         AnalyticsService,
         AiService,
         BillingService,
+        AutomationService,
       ],
     };
   }

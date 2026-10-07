@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BookOpen,
   Bot,
+  CalendarClock,
   Check,
   CheckCircle2,
   Copy,
@@ -57,6 +58,7 @@ import { invalidate, useApi } from '@/lib/hooks';
 import { formatBytes } from '@/lib/media';
 import { PlatformIcon, PLATFORM_BRAND } from '@/lib/platforms';
 import { WhatsAppModal } from '@/components/modals/WhatsAppModal';
+import { SchedulersManager } from '@/components/automation/SchedulersManager';
 
 
 
@@ -705,7 +707,7 @@ function AiSettingsSection() {
   );
 }
 
-type SettingsTab = 'networks' | 'whatsapp' | 'ai' | 'billing';
+type SettingsTab = 'networks' | 'whatsapp' | 'schedulers' | 'ai' | 'billing';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: any; description: string }[] = [
   {
@@ -719,6 +721,12 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: any; description: s
     label: 'WhatsApp',
     icon: MessageSquare,
     description: 'Connect WhatsApp session, pair QR code, and manage customer dispatch attributes',
+  },
+  {
+    id: 'schedulers',
+    label: 'Schedulers',
+    icon: CalendarClock,
+    description: 'Customize background execution intervals, account liveness monitor, and order scanner',
   },
   {
     id: 'ai',
@@ -1827,6 +1835,30 @@ function WhatsAppSection() {
   );
 }
 
+function SchedulersSection() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-fg flex items-center gap-2">
+            <CalendarClock className="size-5 text-primary" />
+            Automated Background Schedulers
+          </h2>
+          <p className="text-xs text-muted mt-1">
+            Configure how often each background task executes. The worker processes these jobs automatically.
+          </p>
+        </div>
+        <Link href="/automation">
+          <Button variant="outline" size="sm" className="rounded-2xl gap-2 text-xs h-9">
+            <ExternalLink className="size-3.5" /> Open Automation Hub & Leads
+          </Button>
+        </Link>
+      </div>
+      <SchedulersManager />
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<SettingsTab>('networks');
@@ -1891,6 +1923,7 @@ export default function SettingsPage() {
       <FadeIn delay={0.1}>
         {activeTab === 'networks' && <NetworksSection />}
         {activeTab === 'whatsapp' && <WhatsAppSection />}
+        {activeTab === 'schedulers' && <SchedulersSection />}
         {activeTab === 'ai' && <AiSettingsSection />}
         {activeTab === 'billing' && <BillingSection />}
       </FadeIn>

@@ -14,15 +14,16 @@ export function FadeIn({
   inView = false,
   ...rest
 }: HTMLMotionProps<'div'> & { delay?: number; y?: number; inView?: boolean }) {
-  const initial = { opacity: 0, y, filter: 'blur(6px)' };
-  const visible = { opacity: 1, y: 0, filter: 'blur(0px)' };
+  // Opacity + transform only: both run on the compositor. A blur filter repaints every frame.
+  const initial = { opacity: 0, y };
+  const visible = { opacity: 1, y: 0 };
   return (
     <motion.div
       initial={initial}
       {...(inView
         ? { whileInView: visible, viewport: { once: true, margin: '-60px' } }
         : { animate: visible })}
-      transition={{ duration: 0.6, delay, ease: EASE_OUT }}
+      transition={{ duration: 0.35, delay, ease: EASE_OUT }}
       className={className}
       {...rest}
     >
@@ -73,8 +74,18 @@ export function StaggerItem({ className, children }: { className?: string; child
 }
 
 /** Slowly drifting colour blobs behind the whole app: the "alive" background. */
-export function GradientBlobs({ className }: { className?: string }) {
-  const reduce = useReducedMotion();
+export function GradientBlobs({
+  className,
+  animated = true,
+}: {
+  className?: string;
+  /**
+   * Drift the blobs. Off inside the app: an always-moving blurred background forces every
+   * frosted-glass panel above it to re-blur each frame, which made the whole UI janky.
+   */
+  animated?: boolean;
+}) {
+  const reduce = useReducedMotion() || !animated;
   const blobs = [
     {
       color: 'var(--blob-a)',

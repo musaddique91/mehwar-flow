@@ -5,6 +5,12 @@ import { Client, LocalAuth } from 'whatsapp-web.js';
 import type { WhatsAppStatusDto } from '@mehwar/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
+/**
+ * Minimum gap between two outgoing WhatsApp Web messages. WhatsApp flags and blocks accounts that
+ * fire messages back-to-back, so every send (shares, publishes, status) is paced through one queue.
+ */
+export const WHATSAPP_SEND_GAP_MS = 2000;
+
 @Injectable()
 export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WhatsAppService.name);
@@ -15,6 +21,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
   private pushName: string | null = null;
   private isInitializing = false;
   private activeOrgId: string | null = null;
+  private sendQueue: Promise<unknown> = Promise.resolve();
+  private lastSendAt = 0;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -26,7 +34,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
       });
       if (session) {
         this.logger.log(`Found active WhatsApp session for org ${session.organizationId}. Auto-restoring connection...`);
-        this.connect(session.organizationId).catch((err) => {
+        this.connect(session.organizationId, true).catch((err) => {
           this.logger.warn(`Failed to auto-restore WhatsApp connection: ${err.message}`);
         });
       }
@@ -224,7 +232,21 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async connect(orgId?: string): Promise<WhatsAppStatusDto> {
+  private cleanAuthSessionData() {
+    try {
+      const candidates = ['./.wwebjs_auth', './apps/api/.wwebjs_auth'];
+      for (const dir of candidates) {
+        if (fs.existsSync(dir)) {
+          fs.rmSync(dir, { recursive: true, force: true });
+          this.logger.log(`Cleaned WhatsApp auth directory: ${dir}`);
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`Could not clean WhatsApp auth directory: ${e}`);
+    }
+  }
+
+  async connect(orgId?: string, isRestore = false): Promise<WhatsAppStatusDto> {
     if (orgId) {
       this.activeOrgId = orgId;
       await this.saveSessionToDb(orgId, { status: 'SCAN_QR_CODE' });
@@ -250,6 +272,11 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
       this.cleanStaleLocks();
 
+      // If user is initiating a fresh pairing (not auto-restoring an active session), wipe old auth state
+      if (!isRestore) {
+        this.cleanAuthSessionData();
+      }
+
       const chromePath =
         process.env.CHROME_BIN ||
         (fs.existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
@@ -271,6 +298,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
             '--no-first-run',
             '--no-zygote',
             '--disable-gpu',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--disable-site-isolation-trials',
           ],
         },
       });
@@ -316,6 +345,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         this.status = 'DISCONNECTED';
         this.isInitializing = false;
         this.qrCodeDataUrl = null;
+        this.cleanAuthSessionData();
         if (this.activeOrgId) {
           await this.saveSessionToDb(this.activeOrgId, {
             status: 'DISCONNECTED',
@@ -331,6 +361,9 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         this.qrCodeDataUrl = null;
         this.phone = null;
         this.pushName = null;
+        if (reason === 'LOGOUT') {
+          this.cleanAuthSessionData();
+        }
         if (this.activeOrgId) {
           await this.saveSessionToDb(this.activeOrgId, {
             status: 'DISCONNECTED',
@@ -377,6 +410,7 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
       }
       this.client = null;
     }
+    this.cleanAuthSessionData();
     this.status = 'DISCONNECTED';
     this.isInitializing = false;
     this.qrCodeDataUrl = null;
@@ -402,12 +436,12 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
     try {
       // client.setStatus() updates the profile About / Bio text
-      await this.client.setStatus(statusText);
+      await this.paced(() => this.connectedClient().setStatus(statusText));
       this.logger.log(`WhatsApp profile status successfully updated: "${statusText}"`);
 
       // Additionally, try posting to WhatsApp status broadcast (story) if supported
       try {
-        await this.client.sendMessage('status@broadcast', statusText);
+        await this.paced(() => this.connectedClient().sendMessage('status@broadcast', statusText));
         this.logger.log('WhatsApp status broadcast story dispatched');
       } catch (broadcastErr) {
         this.logger.debug?.(`status@broadcast story not sent: ${broadcastErr}`);
@@ -463,8 +497,37 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     if (!clean) throw new Error(`Invalid phone number: ${toPhone}`);
 
     const chatId = `${clean}@c.us`;
-    await this.client.sendMessage(chatId, message);
+    await this.paced(() => this.connectedClient().sendMessage(chatId, message));
     return true;
+  }
+
+  isConnected(): boolean {
+    return this.status === 'CONNECTED' && this.client !== null;
+  }
+
+  /** The live client, re-checked when a queued send finally runs (it may have disconnected). */
+  private connectedClient(): Client {
+    if (!this.isConnected()) throw new Error('WhatsApp disconnected before the message was sent.');
+    return this.client!;
+  }
+
+  /**
+   * Runs `send` after every earlier send has finished and at least WHATSAPP_SEND_GAP_MS has passed
+   * since the previous one, so concurrent callers can never burst messages.
+   */
+  private paced<T>(send: () => Promise<T>): Promise<T> {
+    const run = async () => {
+      const wait = this.lastSendAt + WHATSAPP_SEND_GAP_MS - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      try {
+        return await send();
+      } finally {
+        this.lastSendAt = Date.now();
+      }
+    };
+    const result = this.sendQueue.then(run, run);
+    this.sendQueue = result.catch(() => undefined);
+    return result;
   }
 
   generateDirectWebLink(phone: string, message: string): string {

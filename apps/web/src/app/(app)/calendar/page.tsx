@@ -321,13 +321,15 @@ export default function CalendarPage() {
         </FadeIn>
 
         <Card className="overflow-hidden p-0">
-          <div className="grid grid-cols-7 border-b border-line text-center text-xs font-semibold uppercase tracking-wider text-muted">
-            {WEEKDAYS.map((w) => (
-              <div key={w} className="py-2">
-                {w}
+          <div className="overflow-x-auto no-scrollbar">
+            <div className="min-w-[560px] md:min-w-0">
+              <div className="grid grid-cols-7 border-b border-line text-center text-xs font-semibold uppercase tracking-wider text-muted">
+                {WEEKDAYS.map((w) => (
+                  <div key={w} className="py-2">
+                    {w}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
           <motion.div
             key={`${view}-${days[0]}`}
             initial={{ opacity: 0, x: 20 }}
@@ -426,6 +428,8 @@ export default function CalendarPage() {
               );
             })}
           </motion.div>
+            </div>
+          </div>
         </Card>
         <p className="text-xs text-muted">
           Drag a scheduled post to another day to move it (the time stays the same). Times are in{' '}

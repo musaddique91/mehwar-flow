@@ -61,13 +61,17 @@ export class ChannelsController {
   getAllComments(
     @CurrentAuth() auth: AuthContext,
     @Query('channelId') channelId?: string,
-    @Query('sampleIfEmpty') sampleIfEmpty?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('platform') platform?: string,
+    @Query('refresh') refresh?: string,
   ) {
-    return this.channels.getAllComments(
-      auth.organizationId,
-      channelId,
-      sampleIfEmpty === 'true',
-    );
+    return this.channels.getAllComments(auth.organizationId, channelId, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      platform,
+      refresh: refresh === 'true',
+    });
   }
 
   @Get(':id/details')
