@@ -61,6 +61,9 @@ interface YouTubeVideoItem {
   duration: string;
   isShort: boolean;
   url: string;
+  /** Playable video file (Instagram videos/reels); absent for platforms that only embed. */
+  mediaUrl?: string | null;
+  mediaType?: string;
 }
 
 interface ChannelDetailsResponse {
@@ -855,11 +858,30 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                       allowFullScreen
                     />
                   </div>
+                ) : selectedVideo.mediaUrl ? (
+                  <video
+                    key={selectedVideo.id}
+                    src={selectedVideo.mediaUrl}
+                    poster={selectedVideo.thumbnailUrl || undefined}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="max-h-[60vh] w-full rounded-xl bg-black object-contain"
+                  />
                 ) : selectedVideo.thumbnailUrl ? (
-                  <div className="relative w-full overflow-hidden rounded-xl bg-muted" style={{ paddingBottom: '56.25%' }}>
+                  <a
+                    href={selectedVideo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group relative block w-full overflow-hidden rounded-xl bg-muted"
+                    style={{ paddingBottom: '56.25%' }}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={selectedVideo.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
-                  </div>
+                    <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/55 py-2 text-xs font-semibold text-white">
+                      <ExternalLink className="size-3.5" /> Open on {PLATFORM_RULES[platform].label}
+                    </span>
+                  </a>
                 ) : null}
                 {selectedVideo.description && (
                   <p className="text-xs text-muted line-clamp-4 whitespace-pre-line">{selectedVideo.description}</p>

@@ -596,6 +596,9 @@ export class InstagramConnector extends MetaConnector implements PlatformConnect
       duration: string;
       isShort: boolean;
       url: string;
+      /** Direct, playable file for videos/reels (Instagram CDN URL; expires, so never cache it). */
+      mediaUrl: string | null;
+      mediaType: string;
     }> = [];
 
     try {
@@ -619,6 +622,8 @@ export class InstagramConnector extends MetaConnector implements PlatformConnect
         duration: '',
         isShort: m.media_type === 'VIDEO' || m.media_type === 'REELS',
         url: m.permalink ?? `https://www.instagram.com/p/${m.id}`,
+        mediaUrl: m.media_type === 'VIDEO' ? (m.media_url ?? null) : null,
+        mediaType: m.media_type ?? 'IMAGE',
       }));
     } catch {
       // Ignore

@@ -416,7 +416,7 @@ export class ChannelsService {
       };
     }
 
-    const connector = this.connectors.get(channel.platform) as any;
+    const connector = this.requireConnector(channel.platform) as any;
     const accessToken = await this.getValidAccessToken(organizationId, channel);
 
     let details: any = {};
@@ -512,6 +512,18 @@ export class ChannelsService {
     };
   }
 
+  /** The platform's connector, or a 400 (not a 500) when that network has no API support here. */
+  private requireConnector(platform: Platform) {
+    if (!this.connectors.has(platform)) {
+      throw new BadRequestException(
+        platform === 'whatsapp'
+          ? 'WhatsApp posts have no comments or reactions to manage here.'
+          : `${platform} is not configured on this server.`,
+      );
+    }
+    return this.connectors.get(platform);
+  }
+
   async getVideoComments(organizationId: string, channelId: string, videoId: string) {
     const channel = await this.prisma.tenant(organizationId).channel.findFirst({
       where: { id: channelId, status: { not: 'DISCONNECTED' } },
@@ -523,6 +535,8 @@ export class ChannelsService {
     const REAL_COMMENT_PLATFORMS = ['youtube', 'instagram', 'facebook', 'x', 'tiktok'];
     const supportsRealComments = REAL_COMMENT_PLATFORMS.includes(channel.platform);
 
+    // No API connector (WhatsApp Web, or a network without credentials): there are no comments to read.
+    if (!this.connectors.has(channel.platform)) return [];
     const connector = this.connectors.get(channel.platform) as any;
     if (typeof connector?.getVideoComments === 'function') {
       try {
@@ -592,7 +606,7 @@ export class ChannelsService {
     });
     if (!channel) throw new NotFoundException('Channel not found');
 
-    const connector = this.connectors.get(channel.platform) as any;
+    const connector = this.requireConnector(channel.platform) as any;
     if (typeof connector?.replyToComment !== 'function') {
       throw new BadRequestException(
         `Replying to comments is not supported for ${channel.platform}`,
@@ -615,7 +629,7 @@ export class ChannelsService {
       include: { credential: true },
     });
     if (!channel) throw new NotFoundException('Channel not found');
-    const connector = this.connectors.get(channel.platform) as any;
+    const connector = this.requireConnector(channel.platform) as any;
     if (typeof connector?.likePost !== 'function') {
       throw new BadRequestException(`Liking posts is not supported for ${channel.platform}`);
     }
@@ -629,7 +643,7 @@ export class ChannelsService {
       include: { credential: true },
     });
     if (!channel) throw new NotFoundException('Channel not found');
-    const connector = this.connectors.get(channel.platform) as any;
+    const connector = this.requireConnector(channel.platform) as any;
     if (typeof connector?.retweetPost !== 'function') {
       throw new BadRequestException(`Retweeting is not supported for ${channel.platform}`);
     }
@@ -659,7 +673,7 @@ export class ChannelsService {
       include: { credential: true },
     });
     if (!channel) throw new NotFoundException('Channel not found');
-    const connector = this.connectors.get(channel.platform) as any;
+    const connector = this.requireConnector(channel.platform) as any;
     if (typeof connector?.deleteComment !== 'function') {
       throw new BadRequestException(`Deleting comments is not supported for ${channel.platform}`);
     }

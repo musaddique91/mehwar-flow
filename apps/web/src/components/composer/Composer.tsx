@@ -496,6 +496,9 @@ export function Composer({
         media={media}
         uploads={uploads}
         onRemove={(id) => setMedia((m) => m.filter((x) => x.id !== id))}
+        onReplace={(oldId, newMedia) =>
+          setMedia((cur) => cur.map((m) => (m.id === oldId ? newMedia : m)))
+        }
       />
 
       {/* Channel chips */}

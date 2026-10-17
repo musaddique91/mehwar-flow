@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as qrcode from 'qrcode';
 import { Client, LocalAuth } from 'whatsapp-web.js';
 import type { WhatsAppStatusDto } from '@mehwar/shared';
@@ -186,8 +187,12 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (dbSession) {
+      // The DB only remembers the last known state. When this process has no live client and is
+      // not starting one, the honest answer is DISCONNECTED (e.g. a crashed or never-restored
+      // session), never a "connected" or "scan QR" that cannot be acted on.
+      const live = this.isInitializing ? dbSession.status : 'DISCONNECTED';
       return {
-        status: dbSession.status as 'DISCONNECTED' | 'SCAN_QR_CODE' | 'CONNECTED',
+        status: live as 'DISCONNECTED' | 'SCAN_QR_CODE' | 'CONNECTED',
         qrCodeDataUrl: this.qrCodeDataUrl,
         phone: dbSession.phoneNumber,
         pushName: dbSession.pushname,
@@ -232,17 +237,23 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Wipes the saved WhatsApp Web login. Only the directory's *contents* are removed: in Docker the
+   * directory itself is a mounted volume, and deleting a mount point fails with EACCES, which
+   * used to leave the old session behind and break the next pairing.
+   */
   private cleanAuthSessionData() {
-    try {
-      const candidates = ['./.wwebjs_auth', './apps/api/.wwebjs_auth'];
-      for (const dir of candidates) {
-        if (fs.existsSync(dir)) {
-          fs.rmSync(dir, { recursive: true, force: true });
-          this.logger.log(`Cleaned WhatsApp auth directory: ${dir}`);
+    const candidates = ['./.wwebjs_auth', './apps/api/.wwebjs_auth'];
+    for (const dir of candidates) {
+      if (!fs.existsSync(dir)) continue;
+      try {
+        for (const entry of fs.readdirSync(dir)) {
+          fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
         }
+        this.logger.log(`Cleared WhatsApp auth data in ${dir}`);
+      } catch (e) {
+        this.logger.warn(`Could not clear WhatsApp auth data in ${dir}: ${e}`);
       }
-    } catch (e) {
-      this.logger.warn(`Could not clean WhatsApp auth directory: ${e}`);
     }
   }
 
@@ -334,10 +345,11 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
         }
       });
 
-      this.client.on('authenticated', async () => {
-        this.logger.log('WhatsApp Web client authenticated');
-        this.status = 'CONNECTED';
-        this.isInitializing = false;
+      // Authenticated is not usable yet: WhatsApp still has to sync before `ready`. Clear the QR so
+      // the UI shows "connecting…", and only report CONNECTED on `ready`.
+      this.client.on('authenticated', () => {
+        this.logger.log('WhatsApp Web client authenticated, waiting for ready');
+        this.qrCodeDataUrl = null;
       });
 
       this.client.on('auth_failure', async (msg) => {
@@ -373,10 +385,18 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
       });
 
       // Start initialization
-      void this.client.initialize().catch((err) => {
+      void this.client.initialize().catch(async (err) => {
         this.logger.error('WhatsApp initialize error', err);
         this.status = 'DISCONNECTED';
         this.isInitializing = false;
+        this.qrCodeDataUrl = null;
+        // Otherwise the DB keeps SCAN_QR_CODE and the UI waits for a QR code that never comes.
+        if (this.activeOrgId) {
+          await this.saveSessionToDb(this.activeOrgId, {
+            status: 'DISCONNECTED',
+            disconnectedAt: new Date(),
+          });
+        }
       });
 
       // Wait up to 10 seconds for initial QR event before returning HTTP response

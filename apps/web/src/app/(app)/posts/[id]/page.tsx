@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  ArrowLeft,
   CalendarClock,
   ExternalLink,
   Heart,
@@ -395,13 +394,6 @@ export default function PostDetailPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pt-2">
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted transition hover:text-fg"
-      >
-        <ArrowLeft className="size-4" /> Back to Home
-      </Link>
-
       {!post ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <Skeleton className="aspect-video w-full rounded-2xl" />

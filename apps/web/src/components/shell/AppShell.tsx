@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CalendarDays,
   ChartNoAxesColumn,
+  ChevronLeft,
   ChevronRight,
   House,
   Images,
@@ -437,20 +438,62 @@ function NotificationsBell() {
   );
 }
 
+/** Title + one-line purpose per page, shown in the header so users always know where they are. */
+const PAGE_INFO: { prefix: string; title: string; hint: string; back?: { href: string; label: string } }[] = [
+  { prefix: '/posts/', title: 'Post details', hint: 'Video, channels and comments', back: { href: '/dashboard', label: 'Home' } },
+  { prefix: '/channels/select', title: 'Choose accounts', hint: 'Pick which pages or accounts to connect', back: { href: '/channels', label: 'Channels' } },
+  { prefix: '/channels/', title: 'Channel', hint: 'Videos, stats and comments', back: { href: '/channels', label: 'Channels' } },
+  { prefix: '/schedules', title: 'My Schedules', hint: 'Everything queued to go out' },
+  { prefix: '/calendar', title: 'Calendar', hint: 'Plan your month at a glance' },
+  { prefix: '/comments', title: 'Comments', hint: 'Replies from every channel in one inbox' },
+  { prefix: '/users', title: 'Customers', hint: 'Contacts, groups and WhatsApp sharing' },
+  { prefix: '/automation', title: 'Automation', hint: 'Schedulers and order leads' },
+  { prefix: '/channels', title: 'Channels', hint: 'Connect and manage your social accounts' },
+  { prefix: '/media', title: 'Media', hint: 'Your photos and videos' },
+  { prefix: '/analytics', title: 'Analytics', hint: 'Reach, engagement and growth' },
+  { prefix: '/notifications', title: 'Notifications', hint: 'Alerts and activity' },
+  { prefix: '/settings', title: 'Settings', hint: 'Account, WhatsApp, AI and billing' },
+];
+
 function Topbar() {
   const { user } = useAuth();
+  const pathname = usePathname();
+  const page = PAGE_INFO.find((p) => pathname.startsWith(p.prefix));
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 backdrop-blur-xl md:px-8">
-      <div className="md:hidden">
-        <Logo href="/dashboard" />
+      <div className="flex min-w-0 items-center gap-2">
+        {page?.back ? (
+          <Link
+            href={page.back.href}
+            aria-label={`Back to ${page.back.label}`}
+            className="glass flex size-9 shrink-0 items-center justify-center rounded-full text-muted transition hover:text-fg"
+          >
+            <ChevronLeft className="size-4" />
+          </Link>
+        ) : (
+          <div className="md:hidden">
+            <Logo href="/dashboard" />
+          </div>
+        )}
+        {page ? (
+          <div className={cn('min-w-0', !page.back && 'hidden md:block')}>
+            <p className="truncate text-lg font-bold leading-tight tracking-tight md:text-xl">{page.title}</p>
+            <p className="hidden truncate text-xs text-muted sm:block">{page.hint}</p>
+          </div>
+        ) : (
+          <div className="hidden md:block">
+            <p className="text-sm text-muted" suppressHydrationWarning>
+              {greeting},
+            </p>
+            <p className="text-xl font-bold tracking-tight" suppressHydrationWarning>
+              {user?.name.split(' ')[0] ?? 'there'} 👋
+            </p>
+          </div>
+        )}
       </div>
-      <div className="hidden md:block">
-        <p className="text-sm text-muted" suppressHydrationWarning>{greeting},</p>
-        <p className="text-xl font-bold tracking-tight" suppressHydrationWarning>{user?.name.split(' ')[0] ?? 'there'} 👋</p>
-      </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <NotificationsBell />
         <ThemeToggle />
         <div className="md:hidden">
@@ -828,139 +871,99 @@ function MobileMoreDrawer({ open, onClose }: { open: boolean; onClose: () => voi
   return createPortal(content, document.body);
 }
 
+const MOBILE_TABS: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: '/dashboard', label: 'Home', icon: House },
+  { href: '/schedules', label: 'Schedules', icon: CalendarClock },
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
+];
+
+function TabButton({
+  active,
+  label,
+  icon: Icon,
+}: {
+  active: boolean;
+  label: string;
+  icon: LucideIcon;
+}) {
+  return (
+    <span className="flex flex-col items-center gap-0.5">
+      <span
+        className={cn(
+          'flex h-7 w-12 items-center justify-center rounded-full transition-colors',
+          active && 'bg-fuchsia-500/15',
+        )}
+      >
+        <Icon
+          className={cn('size-5', active ? 'text-fuchsia-500 dark:text-fuchsia-400' : 'text-muted')}
+        />
+      </span>
+      <span
+        className={cn(
+          'text-[10px] font-semibold leading-none',
+          active ? 'text-fg' : 'text-muted',
+        )}
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
 function MobileTabBar() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const isMoreActive =
-    MORE_NAV_ITEMS.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)) ||
-    moreOpen;
+    moreOpen || MORE_NAV_ITEMS.some((item) => isActive(pathname, item.href));
 
   const handleCreateClick = (e: React.MouseEvent) => {
     if (pathname === '/dashboard') {
       e.preventDefault();
       const el = document.getElementById('compose');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const textarea = el.querySelector('textarea');
-        if (textarea) textarea.focus();
-      }
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.querySelector('textarea')?.focus();
     }
   };
+
+  const tab = (t: (typeof MOBILE_TABS)[number]) => (
+    <Link
+      key={t.href}
+      href={t.href}
+      aria-current={isActive(pathname, t.href) ? 'page' : undefined}
+      className="flex flex-1 justify-center py-1"
+    >
+      <TabButton active={isActive(pathname, t.href)} label={t.label} icon={t.icon} />
+    </Link>
+  );
 
   return (
     <>
       <nav
-        className="glass fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-full bg-card-strong px-2 py-2 shadow-2xl md:hidden"
-        aria-label="Mobile Navigation"
+        className="glass fixed inset-x-3 bottom-3 z-40 flex items-center rounded-3xl bg-card-strong px-1 py-1.5 shadow-2xl md:hidden"
+        aria-label="Mobile navigation"
       >
-        {/* 1. Home */}
-        <Link
-          href="/dashboard"
-          aria-label="Home"
-          className="relative flex size-11 items-center justify-center"
-        >
-          <motion.span whileTap={{ scale: 0.85 }} className="block">
-            {pathname === '/dashboard' && (
-              <motion.span
-                layoutId="tab-pill"
-                className="absolute inset-0 rounded-full bg-line"
-              />
-            )}
-            <House
-              className={cn(
-                'relative size-5',
-                pathname === '/dashboard'
-                  ? 'text-fuchsia-500 dark:text-fuchsia-400'
-                  : 'text-muted',
-              )}
-            />
-          </motion.span>
-        </Link>
-
-        {/* 2. My Schedules */}
-        <Link
-          href="/schedules"
-          aria-label="My Schedules"
-          className="relative flex size-11 items-center justify-center"
-        >
-          <motion.span whileTap={{ scale: 0.85 }} className="block">
-            {pathname.startsWith('/schedules') && (
-              <motion.span
-                layoutId="tab-pill"
-                className="absolute inset-0 rounded-full bg-line"
-              />
-            )}
-            <CalendarClock
-              className={cn(
-                'relative size-5',
-                pathname.startsWith('/schedules')
-                  ? 'text-fuchsia-500 dark:text-fuchsia-400'
-                  : 'text-muted',
-              )}
-            />
-          </motion.span>
-        </Link>
-
-        {/* 3. Create (Center Floating CTA) */}
+        {tab(MOBILE_TABS[0])}
+        {tab(MOBILE_TABS[1])}
         <Link
           href="/dashboard#compose"
           onClick={handleCreateClick}
           aria-label="Create post"
+          className="flex flex-1 justify-center"
         >
-          <motion.span whileTap={{ scale: 0.88 }} className="block">
-            <span className="brand-gradient flex size-12 items-center justify-center rounded-full text-white shadow-lg shadow-fuchsia-500/40">
-              <SquarePen className="size-5" />
-            </span>
-          </motion.span>
+          <span className="brand-gradient flex size-12 items-center justify-center rounded-full text-white shadow-lg shadow-fuchsia-500/40 transition active:scale-90">
+            <SquarePen className="size-5" />
+          </span>
         </Link>
-
-        {/* 4. Calendar */}
-        <Link
-          href="/calendar"
-          aria-label="Calendar"
-          className="relative flex size-11 items-center justify-center"
-        >
-          <motion.span whileTap={{ scale: 0.85 }} className="block">
-            {pathname.startsWith('/calendar') && (
-              <motion.span
-                layoutId="tab-pill"
-                className="absolute inset-0 rounded-full bg-line"
-              />
-            )}
-            <CalendarDays
-              className={cn(
-                'relative size-5',
-                pathname.startsWith('/calendar')
-                  ? 'text-fuchsia-500 dark:text-fuchsia-400'
-                  : 'text-muted',
-              )}
-            />
-          </motion.span>
-        </Link>
-
-        {/* 5. More (3 Dots -> Opens Remaining Menus) */}
+        {tab(MOBILE_TABS[2])}
         <button
           type="button"
           onClick={() => setMoreOpen((o) => !o)}
           aria-label="More menus"
           aria-expanded={moreOpen}
-          className="relative flex size-11 items-center justify-center"
+          className="flex flex-1 justify-center py-1"
         >
-          <motion.span whileTap={{ scale: 0.85 }} className="block">
-            {isMoreActive && (
-              <motion.span
-                layoutId="tab-pill"
-                className="absolute inset-0 rounded-full bg-line"
-              />
-            )}
-            <MoreHorizontal
-              className={cn(
-                'relative size-5',
-                isMoreActive ? 'text-fuchsia-500 dark:text-fuchsia-400' : 'text-muted',
-              )}
-            />
-          </motion.span>
+          <TabButton active={isMoreActive} label="More" icon={MoreHorizontal} />
         </button>
       </nav>
 
