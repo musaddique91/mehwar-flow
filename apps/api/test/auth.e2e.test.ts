@@ -130,6 +130,43 @@ describe('auth', () => {
     await request(app.getHttpServer()).post('/auth/refresh').set('Cookie', cookie).expect(401);
   });
 
+  it('supports mobile client auth flow with explicit refreshToken in body and header', async () => {
+    const email = newEmail();
+    const password = 'super-secret-password';
+    const reg = await request(app.getHttpServer())
+      .post('/auth/register')
+      .set('X-Client', 'mobile')
+      .send({ email, password, name: 'Mobile User', timezone: 'UTC' })
+      .expect(201);
+
+    expect(reg.body.refreshToken).toBeDefined();
+    expect(typeof reg.body.refreshToken).toBe('string');
+
+    // Refresh using body refreshToken
+    const refreshed = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('X-Client', 'mobile')
+      .send({ refreshToken: reg.body.refreshToken })
+      .expect(200);
+
+    expect(refreshed.body.refreshToken).toBeDefined();
+    expect(refreshed.body.refreshToken).not.toBe(reg.body.refreshToken);
+
+    // Logout using body refreshToken
+    await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('X-Client', 'mobile')
+      .send({ refreshToken: refreshed.body.refreshToken })
+      .expect(204);
+
+    // Refreshing with revoked token fails
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('X-Client', 'mobile')
+      .send({ refreshToken: refreshed.body.refreshToken })
+      .expect(401);
+  });
+
   it('updates the profile and changes the password (revoking sessions)', async () => {
     const { token, cookie, email, password } = await register();
     const patched = await request(app.getHttpServer())

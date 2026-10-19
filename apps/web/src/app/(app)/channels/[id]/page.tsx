@@ -66,6 +66,85 @@ interface YouTubeVideoItem {
   mediaType?: string;
 }
 
+/** Official embed player for networks whose API gives no playable file (or when the file fails). */
+function embedUrlFor(platform: Platform, v: { id: string; url?: string }): string | null {
+  const url = v.url ?? '';
+  switch (platform) {
+    case 'instagram': {
+      const m = url.match(/instagram\.com\/(p|reel|reels|tv)\/([\w-]+)/);
+      return m ? `https://www.instagram.com/${m[1] === 'reels' ? 'reel' : m[1]}/${m[2]}/embed` : null;
+    }
+    case 'facebook':
+      return url
+        ? `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&autoplay=true`
+        : null;
+    case 'tiktok':
+      return /^\d+$/.test(v.id) ? `https://www.tiktok.com/embed/v2/${v.id}` : null;
+    case 'x':
+      return /^\d+$/.test(v.id) ? `https://platform.twitter.com/embed/Tweet.html?id=${v.id}` : null;
+    default:
+      return null;
+  }
+}
+
+/** Plays the direct file when there is one; falls back to the network's embed player. */
+function VideoPlayer({ platform, video }: { platform: Platform; video: YouTubeVideoItem }) {
+  const [fileFailed, setFileFailed] = useState(false);
+  const embed = embedUrlFor(platform, video);
+  const openLink = video.url ? (
+    <a
+      href={video.url}
+      target="_blank"
+      rel="noreferrer"
+      className="group relative block w-full overflow-hidden rounded-xl bg-muted"
+      style={{ paddingBottom: '56.25%' }}
+    >
+      {video.thumbnailUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={video.thumbnailUrl} alt="" referrerPolicy="no-referrer" className="absolute inset-0 size-full object-cover" />
+      )}
+      <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/55 py-2 text-xs font-semibold text-white">
+        <ExternalLink className="size-3.5" /> Open on {PLATFORM_RULES[platform].label}
+      </span>
+    </a>
+  ) : null;
+
+  if (video.mediaUrl && !fileFailed) {
+    return (
+      <video
+        key={video.id}
+        src={video.mediaUrl}
+        poster={video.thumbnailUrl || undefined}
+        controls
+        autoPlay
+        playsInline
+        preload="metadata"
+        onError={() => setFileFailed(true)}
+        className="max-h-[60vh] w-full rounded-xl bg-black object-contain"
+      />
+    );
+  }
+  if (embed) {
+    const tall = platform === 'instagram' || platform === 'tiktok' || (platform === 'x');
+    return (
+      <div
+        className={`relative mx-auto w-full overflow-hidden rounded-xl bg-black ${tall ? 'max-w-[420px]' : ''}`}
+        style={{ paddingBottom: tall ? '125%' : '56.25%' }}
+      >
+        <iframe
+          key={video.id}
+          src={embed}
+          title={video.title}
+          className="absolute inset-0 size-full border-0 bg-white"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+  return openLink;
+}
+
 interface ChannelDetailsResponse {
   id: string;
   platform: Platform;
@@ -486,7 +565,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
 
                 {/* Header Action Buttons */}
                 <div className="flex items-center gap-2 shrink-0">
-                  <Link href={platform === 'whatsapp' ? '/settings?tab=whatsapp&scan=true' : `/settings?connect=${platform}`}>
+                  <Link href={platform === 'whatsapp' ? '/settings?tab=networks' : `/settings?connect=${platform}`}>
                     <Button variant="secondary" size="sm">
                       <RefreshCw className="size-3.5" /> Reconnect
                     </Button>
@@ -673,6 +752,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                           <img
                             src={v.thumbnailUrl}
                             alt=""
+                            referrerPolicy="no-referrer"
                             className="size-full object-cover transition group-hover:scale-105"
                           />
                           {v.isShort && (
@@ -754,7 +834,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                           )}
                           <div className="flex items-center gap-3">
                             <span className="flex items-center gap-1" title="Likes">
-                              <ThumbsUp className="size-3.5 text-red-500" />
+                              {platform === 'instagram' ? <Heart className="size-3.5 text-red-500" /> : <ThumbsUp className="size-3.5 text-red-500" />}
                               {formatNumber(v.likes + (likedPosts.has(v.id) ? 1 : 0))}
                             </span>
                             <span className="flex items-center gap-1" title="Comments">
@@ -776,7 +856,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                               title="Like post"
                             >
                               <Heart className={`size-3.5 ${likedPosts.has(v.id) ? 'fill-red-500 text-red-500' : ''}`} />
-                              <span>{likedPosts.has(v.id) ? 'Liked' : 'Like'}</span>
+                              {platform !== 'instagram' && <span>{likedPosts.has(v.id) ? 'Liked' : 'Like'}</span>}
                             </button>
 
                             {platform === 'x' && (
@@ -827,7 +907,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                     <span>{new Date(selectedVideo.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   )}
                   <span className="flex items-center gap-1"><Eye className="size-3 text-blue-500" />{formatNumber(selectedVideo.views)}</span>
-                  <span className="flex items-center gap-1"><ThumbsUp className="size-3 text-red-500" />{formatNumber(selectedVideo.likes)}</span>
+                  <span className="flex items-center gap-1">{platform === 'instagram' ? <Heart className="size-3 text-red-500" /> : <ThumbsUp className="size-3 text-red-500" />}{formatNumber(selectedVideo.likes)}</span>
                   <span className="flex items-center gap-1"><MessageSquare className="size-3 text-emerald-500" />{formatNumber(selectedVideo.comments)}</span>
                   <a href={selectedVideo.url} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1 font-semibold text-primary hover:underline">
@@ -858,31 +938,9 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                       allowFullScreen
                     />
                   </div>
-                ) : selectedVideo.mediaUrl ? (
-                  <video
-                    key={selectedVideo.id}
-                    src={selectedVideo.mediaUrl}
-                    poster={selectedVideo.thumbnailUrl || undefined}
-                    controls
-                    autoPlay
-                    playsInline
-                    className="max-h-[60vh] w-full rounded-xl bg-black object-contain"
-                  />
-                ) : selectedVideo.thumbnailUrl ? (
-                  <a
-                    href={selectedVideo.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="group relative block w-full overflow-hidden rounded-xl bg-muted"
-                    style={{ paddingBottom: '56.25%' }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={selectedVideo.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
-                    <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/55 py-2 text-xs font-semibold text-white">
-                      <ExternalLink className="size-3.5" /> Open on {PLATFORM_RULES[platform].label}
-                    </span>
-                  </a>
-                ) : null}
+                ) : (
+                  <VideoPlayer platform={platform} video={selectedVideo} />
+                )}
                 {selectedVideo.description && (
                   <p className="text-xs text-muted line-clamp-4 whitespace-pre-line">{selectedVideo.description}</p>
                 )}
@@ -1317,7 +1375,7 @@ What questions do you have about this? Drop them in the comments below! 👇`;
                                 )}
                                 <div className="mt-2 flex items-center gap-3 text-[11px] text-muted">
                                   <span className="flex items-center gap-1">
-                                    <ThumbsUp className="size-3 text-red-500" /> {comment.likeCount}
+                                    {platform === 'instagram' ? <Heart className="size-3 text-red-500" /> : <ThumbsUp className="size-3 text-red-500" />} {comment.likeCount}
                                   </span>
                                   <button
                                     type="button"

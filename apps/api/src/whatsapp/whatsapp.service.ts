@@ -446,38 +446,55 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Updates WhatsApp profile bio / About status using client.setStatus(status).
-   * Also attempts to broadcast a text status story when supported.
+   * Posts `statusText` as a WhatsApp Status (story). WhatsApp Web has no stable API for this, so
+   * the broadcast is attempted and verified; when it does not go through, the text is sent as a
+   * normal message to the connected account's own chat ("Message yourself") so it is never lost.
+   * The profile About line is also refreshed, best effort.
    */
-  async setStatus(statusText: string): Promise<boolean> {
-    if (this.status !== 'CONNECTED' || !this.client) {
+  async setStatus(
+    statusText: string,
+  ): Promise<{ delivered: 'STATUS' | 'SELF_MESSAGE'; reason?: string }> {
+    if (!this.isConnected()) {
       throw new Error('WhatsApp client is not connected. Please scan the QR code in Settings first.');
     }
 
     try {
-      // client.setStatus() updates the profile About / Bio text
       await this.paced(() => this.connectedClient().setStatus(statusText));
-      this.logger.log(`WhatsApp profile status successfully updated: "${statusText}"`);
-
-      // Additionally, try posting to WhatsApp status broadcast (story) if supported
-      try {
-        await this.paced(() => this.connectedClient().sendMessage('status@broadcast', statusText));
-        this.logger.log('WhatsApp status broadcast story dispatched');
-      } catch (broadcastErr) {
-        this.logger.debug?.(`status@broadcast story not sent: ${broadcastErr}`);
-      }
-
-      return true;
     } catch (err) {
-      this.logger.error('Failed to update WhatsApp profile status', err);
-      throw err;
+      this.logger.warn(`WhatsApp About/profile status not updated: ${(err as Error).message}`);
     }
+
+    let reason: string | undefined;
+    try {
+      const sent = await this.paced(() =>
+        this.connectedClient().sendMessage('status@broadcast', statusText),
+      );
+      if (sent && (sent as { id?: unknown }).id) {
+        this.logger.log('WhatsApp status story dispatched');
+        return { delivered: 'STATUS' };
+      }
+      reason = 'WhatsApp did not confirm the status story';
+    } catch (err) {
+      reason = (err as Error).message;
+    }
+
+    this.logger.warn(`WhatsApp status story failed (${reason}); sending to own chat instead`);
+    await this.sendToSelf(statusText);
+    return { delivered: 'SELF_MESSAGE', reason };
+  }
+
+  /** Sends a plain message to the connected account's own number. */
+  async sendToSelf(message: string): Promise<void> {
+    const wid =
+      (this.client?.info?.wid as { _serialized?: string } | undefined)?._serialized ??
+      (this.phone ? `${this.phone}@c.us` : null);
+    if (!wid) throw new Error('Connected WhatsApp number is unknown; reconnect WhatsApp.');
+    await this.paced(() => this.connectedClient().sendMessage(wid, message));
   }
 
   /**
-   * Publishes a post to WhatsApp based on the chosen action:
-   * - STATUS: sets profile status / story
-   * - MESSAGE: sends direct WhatsApp message to recipient or own number
+   * Publishes a post to WhatsApp as a direct message to the recipient (or to the connected
+   * account's own number). `postType` is accepted for old posts but always treated as MESSAGE.
    */
   async publishPostTarget(
     text: string,
@@ -487,25 +504,18 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
       throw new Error('WhatsApp client is not connected. Please pair WhatsApp Web in Settings.');
     }
 
-    const type = options?.postType ?? 'STATUS';
-    if (type === 'STATUS') {
-      await this.setStatus(text);
-      return {
-        externalId: `wa-status-${Date.now()}`,
-        url: 'https://web.whatsapp.com',
-      };
-    } else {
-      const recipient = options?.recipient || this.phone;
-      if (!recipient) {
-        throw new Error('Recipient phone number required for WhatsApp direct message.');
-      }
-      await this.sendTextMessage(recipient, text);
-      const clean = recipient.replace(/\D/g, '');
-      return {
-        externalId: `wa-msg-${Date.now()}`,
-        url: `https://wa.me/${clean}`,
-      };
+    // WhatsApp Web has no reliable Status API, so posts are always sent as a normal message to the
+    // chosen recipient (or to the connected account's own chat).
+    const recipient = options?.recipient || this.phone;
+    if (!recipient) {
+      throw new Error('Recipient phone number required for WhatsApp direct message.');
     }
+    await this.sendTextMessage(recipient, text);
+    const clean = recipient.replace(/\D/g, '');
+    return {
+      externalId: `wa-msg-${Date.now()}`,
+      url: `https://wa.me/${clean}`,
+    };
   }
 
   async sendTextMessage(toPhone: string, message: string): Promise<boolean> {

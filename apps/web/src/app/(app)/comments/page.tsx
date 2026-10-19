@@ -919,7 +919,11 @@ What questions do you have? Drop them below! 👇`;
                             isLiked ? 'text-red-500 font-semibold' : 'hover:text-red-500'
                           }`}
                         >
-                          <ThumbsUp className={`size-3.5 ${isLiked ? 'fill-red-500' : ''}`} />
+                          {comment.platform === 'instagram' ? (
+                            <Heart className={`size-3.5 ${isLiked ? 'fill-red-500' : ''}`} />
+                          ) : (
+                            <ThumbsUp className={`size-3.5 ${isLiked ? 'fill-red-500' : ''}`} />
+                          )}
                           <span>{comment.likeCount + (isLiked ? 1 : 0)}</span>
                         </button>
 

@@ -496,6 +496,14 @@ function Topbar() {
       <div className="flex shrink-0 items-center gap-2">
         <NotificationsBell />
         <ThemeToggle />
+        <Link
+          href="/settings"
+          aria-label="Settings"
+          title="Settings"
+          className="glass flex size-10 items-center justify-center rounded-full text-fg transition hover:bg-card-strong"
+        >
+          <Settings className="size-4" />
+        </Link>
         <div className="md:hidden">
           <UserMenu compact />
         </div>
@@ -850,6 +858,14 @@ function MobileMoreDrawer({ open, onClose }: { open: boolean; onClose: () => voi
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-fg">Appearance</span>
                     <ThemeToggle />
+                    <Link
+                      href="/settings"
+                      aria-label="Settings"
+                      title="Settings"
+                      className="glass flex size-10 items-center justify-center rounded-full text-fg"
+                    >
+                      <Settings className="size-4" />
+                    </Link>
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px] text-muted">
                     <span className="opacity-70">Powered by</span>

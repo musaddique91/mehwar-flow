@@ -138,6 +138,8 @@ services:
     command: ['node', 'dist/main.js']
     environment:
       <<: *app-env
+      # WhatsApp posts are sent by the API (it owns the WhatsApp Web session).
+      API_URL: http://mehwar-flow-api:4000
       FFMPEG_PATH: /usr/bin/ffmpeg
       FFPROBE_PATH: /usr/bin/ffprobe
       PUBLISH_CONCURRENCY: ${PUBLISH_CONCURRENCY}

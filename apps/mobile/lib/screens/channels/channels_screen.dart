@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/platform_brand.dart';
 import '../../models/channel_model.dart';
+import '../../services/channels_service.dart';
 import '../../state/channels_provider.dart';
 import '../../widgets/common/platform_avatar.dart';
+import 'channel_detail_screen.dart';
 
 class ChannelsScreen extends StatefulWidget {
   const ChannelsScreen({super.key});
@@ -17,6 +19,8 @@ class ChannelsScreen extends StatefulWidget {
 }
 
 class _ChannelsScreenState extends State<ChannelsScreen> {
+  final ChannelsService _channelsService = ChannelsService();
+
   @override
   void initState() {
     super.initState();
@@ -26,11 +30,11 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
   }
 
   Future<void> _connectPlatform(String platform) async {
-    // Build the OAuth initiation URL from the backend
-    final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
-    final authUrl = '$base/channels/$platform/auth-url';
+    if (platform.toLowerCase() == 'whatsapp') {
+      _showWhatsAppQrDialog();
+      return;
+    }
 
-    // Fetch the actual OAuth URL from the backend
     try {
       showDialog(
         context: context,
@@ -49,7 +53,7 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Connect $platform via: $authUrl')),
+            SnackBar(content: Text('Could not initiate connection for $platform')),
           );
         }
       }
@@ -60,6 +64,68 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
           SnackBar(content: Text('Error: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _showWhatsAppQrDialog() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.primaryTeal)),
+    );
+    try {
+      final status = await _channelsService.getWhatsAppQr();
+      if (mounted) Navigator.of(context).pop();
+
+      if (!mounted) return;
+      if (status.status == 'connected') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('WhatsApp is already connected!')),
+        );
+        return;
+      }
+
+      if (status.qr == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No QR code available. Please try again.')),
+        );
+        return;
+      }
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Connect WhatsApp'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Scan this QR code with WhatsApp on your phone (Linked Devices):', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: 200,
+                height: 200,
+                child: QrImageView(
+                  data: status.qr!,
+                  version: QrVersions.auto,
+                  size: 200.0,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.read<ChannelsProvider>().fetchChannels();
+              },
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) Navigator.of(context).pop();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('WhatsApp Error: $e')));
     }
   }
 
@@ -343,10 +409,23 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
         borderRadius: BorderRadius.circular(20),
         side: const BorderSide(color: AppColors.softMistSurface),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () async {
+          final deleted = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChannelDetailScreen(channelId: channel.id),
+            ),
+          );
+          if (deleted == true && mounted) {
+            context.read<ChannelsProvider>().fetchChannels();
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
             // Platform avatar with gradient ring
             PlatformAvatar(
               platform: channel.platform,
@@ -454,8 +533,9 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _emptyState() {
     return Center(

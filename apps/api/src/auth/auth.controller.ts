@@ -65,9 +65,14 @@ export class AuthController {
   @Post('refresh')
   async refresh(
     @Req() req: Request,
+    @Body() body: { refreshToken?: string },
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
-    const token = req.cookies?.[REFRESH_COOKIE] as string | undefined;
+    const headerToken = req.headers['x-refresh-token'] as string | undefined;
+    const token =
+      (req.cookies?.[REFRESH_COOKIE] as string | undefined) ??
+      body?.refreshToken ??
+      headerToken;
     if (!token) throw new UnauthorizedException('Missing refresh token');
     try {
       return this.respond(res, await this.auth.refresh(token, clientInfo(req)), req);
@@ -80,8 +85,17 @@ export class AuthController {
   @Public()
   @HttpCode(204)
   @Post('logout')
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
-    await this.auth.logout(req.cookies?.[REFRESH_COOKIE] as string | undefined);
+  async logout(
+    @Req() req: Request,
+    @Body() body: { refreshToken?: string },
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const headerToken = req.headers['x-refresh-token'] as string | undefined;
+    const token =
+      (req.cookies?.[REFRESH_COOKIE] as string | undefined) ??
+      body?.refreshToken ??
+      headerToken;
+    await this.auth.logout(token);
     res.clearCookie(REFRESH_COOKIE, { path: this.config.REFRESH_COOKIE_PATH });
   }
 
@@ -102,7 +116,13 @@ export class AuthController {
       path: this.config.REFRESH_COOKIE_PATH,
       expires: tokens.refreshExpiresAt,
     });
-    return { accessToken: tokens.accessToken, expiresIn: tokens.expiresIn, user: tokens.user };
+    const isMobile = req?.headers['x-client'] === 'mobile';
+    return {
+      accessToken: tokens.accessToken,
+      expiresIn: tokens.expiresIn,
+      user: tokens.user,
+      ...(isMobile ? { refreshToken: tokens.refreshToken } : {}),
+    };
   }
 }
 

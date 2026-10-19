@@ -336,7 +336,7 @@ export function PostPreview({
         </div>
       );
     case 'whatsapp': {
-      const isStatus = (options?.whatsappPostType ?? 'STATUS') === 'STATUS';
+      const isStatus = false; // WhatsApp posts are always sent as messages
       if (isStatus) {
         return (
           <div className={cn(frame, 'overflow-hidden border border-emerald-500/20 shadow-xl bg-[#0b141a]', className)}>

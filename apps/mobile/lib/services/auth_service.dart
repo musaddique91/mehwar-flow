@@ -16,12 +16,12 @@ class AuthService {
         data: {'email': email.trim(), 'password': password},
       );
       final token = res.data['accessToken'] as String;
+      final refreshToken = res.data['refreshToken'] as String?;
       final user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
-      await _client.saveToken(token);
+      await _client.saveTokens(accessToken: token, refreshToken: refreshToken);
       return (token: token, user: user);
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? e.message ?? 'Login failed';
-      throw ApiException(msg is List ? msg.join(', ') : msg.toString(), statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Login failed');
     }
   }
 
@@ -42,12 +42,12 @@ class AuthService {
         },
       );
       final token = res.data['accessToken'] as String;
+      final refreshToken = res.data['refreshToken'] as String?;
       final user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
-      await _client.saveToken(token);
+      await _client.saveTokens(accessToken: token, refreshToken: refreshToken);
       return (token: token, user: user);
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? e.message ?? 'Registration failed';
-      throw ApiException(msg is List ? msg.join(', ') : msg.toString(), statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Registration failed');
     }
   }
 
@@ -56,8 +56,7 @@ class AuthService {
       final res = await _client.dio.get('/auth/me');
       return UserModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) throw UnauthorizedException();
-      throw ApiException(e.message ?? 'Failed to fetch current user', statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to fetch current user');
     }
   }
 
@@ -66,15 +65,33 @@ class AuthService {
       final res = await _client.dio.patch('/me', data: data);
       return UserModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? e.message ?? 'Profile update failed';
-      throw ApiException(msg is List ? msg.join(', ') : msg.toString(), statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Profile update failed');
+    }
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await _client.dio.post('/me/password', data: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      });
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e, 'Failed to change password');
     }
   }
 
   Future<void> logout() async {
     try {
-      await _client.dio.post('/auth/logout');
+      final rt = await _client.getRefreshToken();
+      await _client.dio.post(
+        '/auth/logout',
+        data: {'refreshToken': rt},
+      );
     } catch (_) {}
-    await _client.clearToken();
+    await _client.clearTokens();
   }
 }
+

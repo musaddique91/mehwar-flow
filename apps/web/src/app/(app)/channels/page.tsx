@@ -669,7 +669,7 @@ function ChannelsInner() {
                 >
                   <QrCode className="size-4" /> Scan QR to Connect
                 </Button>
-                <Link href="/settings?tab=whatsapp">
+                <Link href="/settings?tab=networks">
                   <Button variant="secondary" className="gap-1.5">
                     <Settings className="size-4" /> WhatsApp Settings
                   </Button>

@@ -104,11 +104,6 @@ export function WhatsAppModal({ open, onClose }: { open: boolean; onClose: () =>
               <p>Your WhatsApp channel is now active. You can dispatch video and social links directly to your customers and groups without leaving Mehwar Flow.</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-              <Link href="/settings?tab=whatsapp" onClick={onClose}>
-                <Button variant="secondary" size="sm" className="gap-1.5">
-                  <Settings className="size-3.5" /> WhatsApp Settings
-                </Button>
-              </Link>
               <Button variant="ghost" size="sm" onClick={onClose}>
                 Close
               </Button>

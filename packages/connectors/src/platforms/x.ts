@@ -239,7 +239,7 @@ export class XConnector implements PlatformConnector {
         query: {
           max_results: '10',
           'tweet.fields': 'created_at,public_metrics,entities,attachments',
-          'media.fields': 'url,preview_image_url,type',
+          'media.fields': 'url,preview_image_url,type,variants,duration_ms',
           expansions: 'attachments.media_keys',
         },
       });
@@ -254,6 +254,9 @@ export class XConnector implements PlatformConnector {
         const mediaKey = t.attachments?.media_keys?.[0];
         const media = mediaKey ? mediaMap[mediaKey] : null;
         const thumbUrl = media?.url ?? media?.preview_image_url ?? null;
+        const mp4 = ((media?.variants ?? []) as Array<{ content_type?: string; url?: string; bit_rate?: number }>)
+          .filter((v) => v.content_type === 'video/mp4' && v.url)
+          .sort((a, b) => (b.bit_rate ?? 0) - (a.bit_rate ?? 0))[0];
 
         return {
           id: t.id,
@@ -268,6 +271,8 @@ export class XConnector implements PlatformConnector {
           shares: (metrics.retweet_count ?? 0) + (metrics.quote_count ?? 0),
           isShort: false,
           duration: null,
+          mediaUrl: mp4?.url ?? null,
+          mediaType: media?.type ?? null,
         };
       });
     } catch (err) {

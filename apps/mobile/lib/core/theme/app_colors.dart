@@ -17,6 +17,15 @@ class AppColors {
   static const Color softRed         = Color(0xFFD9534F);
   static const Color successGreen    = Color(0xFF2E7D32);
 
+  // Common Aliases
+  static const Color primary       = primaryTeal;
+  static const Color surface       = cardSurface;
+  static const Color surfaceLight  = Color(0xFFF7F9F9);
+  static const Color border        = softMistSurface;
+  static const Color textSecondary = textMuted;
+  static const Color textPrimary   = textHeadline;
+  static const Color error         = softRed;
+
   // Platform Colors
   static Color platformColor(String platform) {
     switch (platform.toLowerCase()) {

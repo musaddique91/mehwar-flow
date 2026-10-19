@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   AuthError,
   NotConfiguredError,
@@ -65,12 +66,17 @@ export async function publishTarget(
         const options = (target.options ?? {}) as TargetOptions;
         const text = target.textOverride ?? target.post.text;
         const apiUrl = process.env.API_URL || 'http://127.0.0.1:4000';
-        const res = await fetch(`${apiUrl}/api/whatsapp/internal-publish`, {
+        const res = await fetch(`${apiUrl}/whatsapp/internal-publish`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-token': createHash('sha256')
+              .update(`wa-internal:${process.env.MASTER_KEYS ?? ''}`)
+              .digest('hex'),
+          },
           body: JSON.stringify({
             text,
-            postType: options.whatsappPostType ?? 'STATUS',
+            postType: 'MESSAGE',
             recipient: options.whatsappRecipient,
           }),
         });

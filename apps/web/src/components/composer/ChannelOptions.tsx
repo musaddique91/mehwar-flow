@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { PlatformIcon } from '@/lib/platforms';
 import { uploadMedia } from '@/lib/media';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 
 export interface TargetDraft {
   textOverride: string | null;
@@ -354,50 +355,17 @@ export function ChannelOptions({
               )}
 
               {channel.platform === 'whatsapp' && (
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <span className="text-xs font-medium text-muted">WhatsApp Action</span>
-                    <Segmented
-                      value={draft.options.whatsappPostType ?? 'STATUS'}
-                      options={['STATUS', 'MESSAGE'] as const}
-                      labels={{ STATUS: 'Set Status', MESSAGE: 'Send Message' }}
-                      onChange={(v) => set({ whatsappPostType: v })}
-                    />
-                  </div>
-
-                  {(draft.options.whatsappPostType ?? 'STATUS') === 'STATUS' ? (
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs space-y-1 text-muted">
-                      <p className="font-semibold text-fg flex items-center gap-1.5">
-                        <MessageSquare className="size-3.5 text-emerald-500" />
-                        WhatsApp Profile Status (About / Bio)
-                      </p>
-                      <p>
-                        When published, updates your WhatsApp profile bio / About status using{' '}
-                        <code className="rounded bg-emerald-500/10 px-1 py-0.5 font-mono text-[11px] text-emerald-500 dark:text-emerald-400">
-                          client.setStatus()
-                        </code>{' '}
-                        and broadcasts to your WhatsApp status story.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <label className="block space-y-1">
-                        <span className="text-xs font-medium text-muted">
-                          Recipient Phone Number (optional)
-                        </span>
-                        <input
-                          type="tel"
-                          placeholder="+971501234567 (or leave empty to send to own number)"
-                          value={draft.options.whatsappRecipient ?? ''}
-                          onChange={(e) => set({ whatsappRecipient: e.target.value })}
-                          className={field}
-                        />
-                      </label>
-                      <p className="text-[11px] text-muted">
-                        Dispatches this post directly as a WhatsApp message to the specified recipient.
-                      </p>
-                    </div>
-                  )}
+                <div className="space-y-2">
+                  <span className="block text-xs font-medium text-muted">
+                    Recipient Phone Number (optional)
+                  </span>
+                  <PhoneInput
+                    value={draft.options.whatsappRecipient ?? ''}
+                    onChange={(v) => set({ whatsappPostType: 'MESSAGE', whatsappRecipient: v || undefined })}
+                  />
+                  <p className="text-[11px] text-muted">
+                    Sent as a WhatsApp message to this number. Leave empty to send it to your own connected number.
+                  </p>
                 </div>
               )}
             </div>

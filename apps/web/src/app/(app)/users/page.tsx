@@ -30,6 +30,7 @@ import { Avatar, Button, Card, Input, Modal, Switch } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { invalidate, useApi } from '@/lib/hooks';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 
 export default function UserManagementPage() {
   const [activeTab, setActiveTab] = useState<'customers' | 'groups'>('customers');
@@ -55,7 +56,7 @@ export default function UserManagementPage() {
           {/* WhatsApp Status Link to Settings */}
           <div className="flex items-center gap-2.5">
             <Link
-              href="/settings?tab=whatsapp"
+              href="/settings?tab=networks"
               className={cn(
                 'flex items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-semibold transition shadow-sm',
                 waStatus?.status === 'CONNECTED'
@@ -414,14 +415,12 @@ function CustomerFormModal({
           autoFocus
         />
 
-        <Input
-          label="Mobile Number"
-          value={mobileNumber}
-          onChange={(e) => handleMobileChange(e.target.value)}
-          placeholder="e.g. +971501234567"
-          icon={<Phone className="size-4" />}
-          required
-        />
+        <div className="space-y-1.5">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-muted">
+            <Phone className="size-4" /> Mobile Number
+          </span>
+          <PhoneInput value={mobileNumber} onChange={handleMobileChange} required />
+        </div>
 
         <div className="rounded-2xl border border-line bg-card/40 p-3 space-y-2">
           <div className="flex items-center justify-between">
@@ -444,13 +443,7 @@ function CustomerFormModal({
           </div>
 
           {!sameAsMobile && (
-            <input
-              type="text"
-              value={whatsappNumber}
-              onChange={(e) => setWhatsappNumber(e.target.value)}
-              placeholder="e.g. +971501234567"
-              className="w-full rounded-xl border border-line bg-elevated/70 px-3 py-2 text-xs text-fg outline-none focus:ring-2 focus:ring-[var(--ring)]"
-            />
+            <PhoneInput value={whatsappNumber} onChange={setWhatsappNumber} />
           )}
         </div>
 

@@ -14,7 +14,24 @@ class MediaService {
           .map((e) => MediaDto.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
-      throw ApiException(e.message ?? 'Failed to load media', statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to load media');
+    }
+  }
+
+  Future<List<MediaItem>> listMedia({String? type}) async {
+    final list = await getMediaList();
+    if (type != null && type.isNotEmpty && type.toLowerCase() != 'all') {
+      return list.where((m) => m.mediaType.toLowerCase() == type.toLowerCase()).toList();
+    }
+    return list;
+  }
+
+  Future<MediaDto> getMedia(String id) async {
+    try {
+      final res = await _client.dio.get('/media/$id');
+      return MediaDto.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e, 'Failed to fetch media details');
     }
   }
 
@@ -22,6 +39,7 @@ class MediaService {
     required File file,
     required String fileName,
     required String mimeType,
+    void Function(int sent, int total)? onProgress,
   }) async {
     try {
       final sizeBytes = await file.length();
@@ -38,33 +56,56 @@ class MediaService {
       final mediaId = mediaData['id'] as String;
       final uploadUrl = step1.data['uploadUrl'] as String;
 
-      // Step 2: Upload raw file bytes via PUT to presigned S3/MinIO URL
-      final bytes = await file.readAsBytes();
+      // Step 2: Stream file directly from disk without buffering all bytes in memory
+      final fileStream = file.openRead();
       await Dio().put(
         uploadUrl,
-        data: Stream.fromIterable([bytes]),
+        data: fileStream,
         options: Options(
           headers: {
             'Content-Type': mimeType,
             'Content-Length': sizeBytes,
           },
         ),
+        onSendProgress: onProgress,
       );
 
       // Step 3: Complete upload
       final step3 = await _client.dio.post('/media/$mediaId/complete');
       return MediaDto.fromJson(step3.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? e.message ?? 'Media upload failed';
-      throw ApiException(msg is List ? msg.join(', ') : msg.toString(), statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Media upload failed');
     }
+  }
+
+  Future<MediaItem> uploadMedia(File file, {void Function(int sent, int total)? onProgress}) async {
+    final name = file.path.split('/').last;
+    final isVid = name.toLowerCase().endsWith('.mp4') ||
+        name.toLowerCase().endsWith('.mov') ||
+        name.toLowerCase().endsWith('.mkv') ||
+        name.toLowerCase().endsWith('.webm');
+    final mime = isVid ? 'video/mp4' : 'image/jpeg';
+    return uploadFile(file: file, fileName: name, mimeType: mime, onProgress: onProgress);
+  }
+
+  /// Polls media until status is READY or FAILED (max 30 seconds)
+  Future<MediaDto> pollUntilReady(String id, {Duration timeout = const Duration(seconds: 30)}) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final media = await getMedia(id);
+      if (media.isReady || media.isFailed) {
+        return media;
+      }
+      await Future.delayed(const Duration(milliseconds: 1500));
+    }
+    return getMedia(id);
   }
 
   Future<void> deleteMedia(String id) async {
     try {
       await _client.dio.delete('/media/$id');
     } on DioException catch (e) {
-      throw ApiException(e.message ?? 'Failed to delete media', statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to delete media');
     }
   }
 }

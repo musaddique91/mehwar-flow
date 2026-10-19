@@ -63,14 +63,16 @@ class PostsProvider extends ChangeNotifier {
   Future<PostDto> createPost({
     required String text,
     String? firstComment,
-    String? scheduledAt,
+    String? localDateTime,
+    String? timezone,
     List<String>? mediaIds,
-    required List<Map<String, dynamic>> targets,
+    required List<TargetInput> targets,
   }) async {
     final newPost = await _postsService.createPost(
       text: text,
       firstComment: firstComment,
-      scheduledAt: scheduledAt,
+      localDateTime: localDateTime,
+      timezone: timezone,
       mediaIds: mediaIds,
       targets: targets,
     );
@@ -83,15 +85,17 @@ class PostsProvider extends ChangeNotifier {
     required String id,
     required String text,
     String? firstComment,
-    String? scheduledAt,
+    String? localDateTime,
+    String? timezone,
     List<String>? mediaIds,
-    required List<Map<String, dynamic>> targets,
+    required List<TargetInput> targets,
   }) async {
     final updated = await _postsService.updatePost(
       id: id,
       text: text,
       firstComment: firstComment,
-      scheduledAt: scheduledAt,
+      localDateTime: localDateTime,
+      timezone: timezone,
       mediaIds: mediaIds,
       targets: targets,
     );
@@ -121,8 +125,16 @@ class PostsProvider extends ChangeNotifier {
     return updated;
   }
 
-  Future<PostDto> schedulePost(String id, String scheduledAt) async {
-    final updated = await _postsService.schedulePost(id, scheduledAt);
+  Future<PostDto> schedulePost(
+    String id, {
+    required String localDateTime,
+    required String timezone,
+  }) async {
+    final updated = await _postsService.schedulePost(
+      id,
+      localDateTime: localDateTime,
+      timezone: timezone,
+    );
     final idx = _posts.indexWhere((p) => p.id == id);
     if (idx != -1) {
       _posts[idx] = updated;

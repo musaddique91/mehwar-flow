@@ -707,20 +707,14 @@ function AiSettingsSection() {
   );
 }
 
-type SettingsTab = 'networks' | 'whatsapp' | 'schedulers' | 'ai' | 'billing';
+type SettingsTab = 'networks' | 'schedulers' | 'ai' | 'billing';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: any; description: string }[] = [
   {
     id: 'networks',
     label: 'Social Networks',
     icon: Share2,
-    description: 'Manage connected social media channels and add new networks',
-  },
-  {
-    id: 'whatsapp',
-    label: 'WhatsApp',
-    icon: MessageSquare,
-    description: 'Connect WhatsApp session, pair QR code, and manage customer dispatch attributes',
+    description: 'Manage connected social media channels, WhatsApp and add new networks',
   },
   {
     id: 'schedulers',
@@ -919,7 +913,7 @@ const PLATFORM_SETUP_GUIDES: Record<Platform, PlatformSetupInfo> = {
     portalUrl: 'https://web.whatsapp.com',
     portalName: 'WhatsApp Web',
     envVars: [],
-    redirectPath: '/settings#whatsapp',
+    redirectPath: '/settings',
     requiredScopesOrProducts: [
       'WhatsApp Multi-Device Web Client',
       'Automated customer media & message dispatch',
@@ -1058,11 +1052,6 @@ function NetworkSetupModal({
               >
                 <QrCode className="size-3.5" /> Start QR Pairing Now
               </Button>
-              <Link href="/settings?tab=whatsapp" onClick={onClose}>
-                <Button variant="secondary" size="sm" className="gap-1.5">
-                  <Settings className="size-3.5" /> Go to WhatsApp Settings
-                </Button>
-              </Link>
             </div>
           </div>
         ) : (
@@ -1415,11 +1404,6 @@ function NetworksSection() {
                           <QrCode className="size-3.5" />
                           {hasConnected ? 'Re-pair via QR' : 'Scan QR to Connect'}
                         </Button>
-                        <Link href="/settings?tab=whatsapp">
-                          <Button size="sm" variant="ghost" className="px-2.5 h-8" title="WhatsApp Configuration">
-                            <Settings className="size-3.5 text-muted hover:text-fg" />
-                          </Button>
-                        </Link>
                       </div>
                     ) : (
                       <Button
@@ -1476,361 +1460,6 @@ function NetworksSection() {
           invalidate('channels', 'whatsapp');
         }}
       />
-    </div>
-  );
-}
-
-function WhatsAppStatusPanel() {
-  const [statusText, setStatusText] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSetStatus = async () => {
-    if (!statusText.trim()) {
-      toast.error('Please enter a status message');
-      return;
-    }
-    setLoading(true);
-    try {
-      await api('/whatsapp/status/profile', {
-        method: 'POST',
-        json: { status: statusText.trim() },
-      });
-      toast.success('WhatsApp status updated! 🟢', {
-        description: 'Your profile About / Bio and WhatsApp story have been updated.',
-      });
-      setStatusText('');
-    } catch (err) {
-      toast.error('Failed to set WhatsApp status', {
-        description: (err as ApiError).message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Card className="p-6">
-      <div className="flex flex-col sm:flex-row sm:items-start gap-6">
-        {/* Icon + description */}
-        <div className="flex items-start gap-4 flex-1">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500 ring-8 ring-emerald-500/10 shrink-0">
-            <MessageSquare className="size-6" />
-          </div>
-          <div className="space-y-1 min-w-0">
-            <h3 className="text-base font-bold tracking-tight">
-              Set WhatsApp Status
-            </h3>
-            <p className="text-xs text-muted max-w-md">
-              Update your WhatsApp profile About / Bio and broadcast a WhatsApp status story using{' '}
-              <code className="rounded bg-emerald-500/10 px-1 py-0.5 font-mono text-[11px] text-emerald-500">
-                client.setStatus()
-              </code>
-              . Max ~139 characters. This will also be used when you select &ldquo;Set Status&rdquo; in the post composer.
-            </p>
-          </div>
-        </div>
-
-        {/* Input + button */}
-        <div className="flex flex-col gap-2 sm:w-80">
-          <div className="relative">
-            <textarea
-              value={statusText}
-              onChange={(e) => setStatusText(e.target.value.slice(0, 139))}
-              rows={3}
-              placeholder="Hey there! Sharing my latest posts 🎉"
-              className="w-full resize-none rounded-xl border border-line bg-elevated/60 px-3 py-2.5 pr-12 text-sm outline-none transition focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/60"
-            />
-            <span className={`absolute bottom-2.5 right-3 text-[11px] font-mono ${statusText.length > 120 ? 'text-amber-400' : 'text-muted'}`}>
-              {statusText.length}/139
-            </span>
-          </div>
-          <Button
-            variant="primary"
-            onClick={handleSetStatus}
-            loading={loading}
-            disabled={!statusText.trim()}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white w-full justify-center"
-          >
-            <MessageSquare className="size-4" /> Set Status Now
-          </Button>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function WhatsAppSection() {
-  const { data: status, setData } = useApi<WhatsAppStatusDto>('/whatsapp/status', ['whatsapp']);
-  const [loading, setLoading] = useState(false);
-  const [polling, setPolling] = useState(false);
-
-  const handleConnect = async () => {
-    setLoading(true);
-    try {
-      const res = await api<WhatsAppStatusDto>('/whatsapp/connect', { method: 'POST' });
-      setData(res);
-      setPolling(true);
-      toast.info('QR Code generated. Scan with WhatsApp on your mobile phone.');
-    } catch (err) {
-      toast.error('Could not initiate WhatsApp connection', {
-        description: (err as ApiError).message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    if (!confirm('Are you sure you want to disconnect this WhatsApp session?')) return;
-    setLoading(true);
-    try {
-      await api('/whatsapp/disconnect', { method: 'POST' });
-      setData({ status: 'DISCONNECTED', savedInDb: true });
-      invalidate('whatsapp', 'channels');
-      setPolling(false);
-      toast.success('WhatsApp disconnected successfully');
-    } catch {
-      toast.error('Could not disconnect WhatsApp');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!polling || status?.status === 'CONNECTED') return;
-
-    const timer = setInterval(async () => {
-      try {
-        const s = await api<WhatsAppStatusDto>('/whatsapp/status');
-        setData(s);
-        if (s.status === 'CONNECTED') {
-          setPolling(false);
-          invalidate('whatsapp', 'channels');
-          toast.success('WhatsApp connected and saved in database! 🎉');
-        }
-      } catch {
-        // ignore polling errors
-      }
-    }, 2500);
-
-    return () => clearInterval(timer);
-  }, [polling, status?.status, setData]);
-
-  const isConnected = status?.status === 'CONNECTED';
-  const isScanning = status?.status === 'SCAN_QR_CODE' && Boolean(status.qrCodeDataUrl);
-
-  return (
-    <div className="space-y-6">
-      {/* Header card */}
-      <Card className="p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500 ring-8 ring-emerald-500/10 shrink-0">
-              <MessageSquare className="size-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-xl font-bold tracking-tight">WhatsApp Messaging</h2>
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                    isConnected
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : isScanning
-                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                        : 'bg-card text-muted border border-line',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'size-1.5 rounded-full',
-                      isConnected ? 'bg-emerald-400 animate-pulse' : isScanning ? 'bg-amber-400 animate-ping' : 'bg-muted',
-                    )}
-                  />
-                  {isConnected ? 'Connected' : isScanning ? 'Awaiting Scan' : 'Disconnected'}
-                </span>
-              </div>
-              <p className="text-xs text-muted mt-1">
-                Pair WhatsApp Web to dispatch automated video and social link updates to your customers and groups.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {isConnected && (
-              <Link href="/channels?platform=whatsapp">
-                <Button variant="secondary" size="sm" className="gap-1.5 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10">
-                  <PlatformIcon platform="whatsapp" className="size-3.5" /> View in Channels
-                </Button>
-              </Link>
-            )}
-            {isConnected ? (
-              <Button variant="danger" size="sm" onClick={handleDisconnect} loading={loading}>
-                <Unplug className="size-4" /> Disconnect
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleConnect}
-                loading={loading}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white"
-              >
-                <QrCode className="size-4" /> {isScanning ? 'Regenerate QR' : 'Connect WhatsApp'}
-              </Button>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {/* Main Grid: Status & QR + Database Persistence */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left Column: Interactive QR / Pairing */}
-        <Card className="p-6 flex flex-col justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-fg flex items-center gap-2">
-              <QrCode className="size-4 text-emerald-500" /> WhatsApp Web Pairing
-            </h3>
-            <p className="text-xs text-muted mt-1">
-              Pair your phone via WhatsApp Web. Session credentials and connection attributes are persisted in the database.
-            </p>
-          </div>
-
-          <div className="my-6 flex flex-col items-center justify-center min-h-[240px]">
-            {isConnected ? (
-              <div className="text-center space-y-3">
-                <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500 ring-8 ring-emerald-500/10">
-                  <CheckCircle2 className="size-8" />
-                </div>
-                <div>
-                  <p className="text-base font-bold text-fg">Session Active & Ready</p>
-                  <p className="text-xs text-muted">
-                    {status.phone ? `+${status.phone}` : 'Paired via WhatsApp Web'}
-                    {status.pushName ? ` (${status.pushName})` : ''}
-                  </p>
-                </div>
-              </div>
-            ) : isScanning ? (
-              <div className="text-center space-y-3">
-                <div className="inline-block p-3 rounded-2xl bg-white shadow-xl ring-4 ring-emerald-500/20">
-                  <img src={status.qrCodeDataUrl!} alt="WhatsApp QR Code" className="size-48 rounded-lg" />
-                </div>
-                <div className="flex items-center justify-center gap-2 text-xs text-muted">
-                  <RefreshCw className="size-3.5 animate-spin text-emerald-500" />
-                  <span>Waiting for mobile scan...</span>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center space-y-3 py-6">
-                <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-card border border-line text-muted">
-                  <Phone className="size-6" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-fg">No Active WhatsApp Session</p>
-                  <p className="text-xs text-muted max-w-xs mx-auto mt-1">
-                    Click the button below to generate a QR code and link your WhatsApp account.
-                  </p>
-                </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleConnect}
-                  loading={loading}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white"
-                >
-                  <QrCode className="size-4" /> Generate QR Code
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-line bg-card-strong/40 p-4 text-xs space-y-2">
-            <p className="font-semibold text-fg">📱 How to link:</p>
-            <ol className="list-decimal list-inside space-y-1 text-muted">
-              <li>Open WhatsApp on your mobile phone</li>
-              <li>Tap <strong>Settings</strong> or <strong>Menu (⋮)</strong> &gt; <strong>Linked Devices</strong></li>
-              <li>Tap <strong>Link a Device</strong> and point your camera at the QR code</li>
-            </ol>
-          </div>
-        </Card>
-
-        {/* Right Column: Database Stored Attributes */}
-        <Card className="p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-fg flex items-center gap-2">
-                <Database className="size-4 text-primary" /> Stored Database Attributes
-              </h3>
-              <span className="text-[11px] font-mono text-muted bg-card px-2 py-0.5 rounded-full border border-line">
-                table: whatsapp_sessions
-              </span>
-            </div>
-            <p className="text-xs text-muted mt-1">
-              Attributes safely isolated per tenant organization with PostgreSQL Row-Level Security.
-            </p>
-          </div>
-
-          <div className="my-4 divide-y divide-line rounded-2xl border border-line bg-card/60">
-            <div className="flex items-center justify-between p-3 text-xs">
-              <span className="text-muted font-medium">Session Status</span>
-              <span
-                className={cn(
-                  'font-semibold font-mono px-2 py-0.5 rounded-full text-[11px]',
-                  isConnected
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : isScanning
-                      ? 'bg-amber-500/15 text-amber-400'
-                      : 'bg-card text-muted',
-                )}
-              >
-                {status?.status ?? 'DISCONNECTED'}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 text-xs">
-              <span className="text-muted font-medium">Paired Phone Number</span>
-              <span className="font-mono font-semibold text-fg">
-                {status?.phone ? `+${status.phone}` : '—'}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 text-xs">
-              <span className="text-muted font-medium">Push Name / Display</span>
-              <span className="font-medium text-fg">{status?.pushName ?? '—'}</span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 text-xs">
-              <span className="text-muted font-medium">Engine / Platform</span>
-              <span className="font-mono text-fg">{status?.platform ?? 'WhatsApp Web (Chrome)'}</span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 text-xs">
-              <span className="text-muted font-medium">Connected At</span>
-              <span className="text-muted">
-                {status?.connectedAt ? new Date(status.connectedAt).toLocaleString() : 'Not connected'}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 text-xs">
-              <span className="text-muted font-medium">Tenant Isolation</span>
-              <span className="text-emerald-400 font-mono text-[11px]">RLS Enforced (app_rls_allows)</span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted space-y-1">
-            <p className="font-semibold text-fg flex items-center gap-1.5">
-              <ShieldCheck className="size-4 text-primary" /> Automatic Fallback Support
-            </p>
-            <p>
-              If WhatsApp Web is unlinked, customer shares generate customized{' '}
-              <code className="text-primary font-mono">web.whatsapp.com/send</code> fallback links with your uploaded video URLs prefilled.
-            </p>
-          </div>
-        </Card>
-      </div>
-
-      {/* Set Profile Status / Story Panel — only visible when connected */}
-      {isConnected && <WhatsAppStatusPanel />}
     </div>
   );
 }
@@ -1922,7 +1551,6 @@ export default function SettingsPage() {
       {/* Active Tab Content Section */}
       <FadeIn delay={0.1}>
         {activeTab === 'networks' && <NetworksSection />}
-        {activeTab === 'whatsapp' && <WhatsAppSection />}
         {activeTab === 'schedulers' && <SchedulersSection />}
         {activeTab === 'ai' && <AiSettingsSection />}
         {activeTab === 'billing' && <BillingSection />}

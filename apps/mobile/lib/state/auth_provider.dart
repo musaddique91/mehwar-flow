@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/network/api_client.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
@@ -18,6 +19,10 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider({AuthService? authService, bool autoInit = true})
       : _authService = authService ?? AuthService() {
+    ApiClient().onSessionExpired = () {
+      _currentUser = null;
+      notifyListeners();
+    };
     if (autoInit) {
       checkAuth();
     } else {
@@ -94,6 +99,29 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       _currentUser = await _authService.updateProfile(data);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authService.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
       return true;
     } catch (e) {
       _errorMessage = e.toString();

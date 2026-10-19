@@ -342,6 +342,20 @@ export class ChannelsService {
     return null;
   }
 
+  /** Playable URL for a video we hosted ourselves (published through Mehwar Flow). */
+  private async localVideoUrl(
+    media: { mimeType: string; status?: string; publicKey: string | null; storageKey: string } | undefined,
+  ): Promise<string | null> {
+    if (!media || !this.storage || !media.mimeType.startsWith('video/')) return null;
+    try {
+      return media.publicKey
+        ? this.storage.publicUrl(media.publicKey)
+        : await this.storage.presignGet(media.storageKey);
+    } catch {
+      return null;
+    }
+  }
+
   async getDetails(organizationId: string, channelId: string) {
     const channel = await this.prisma.tenant(organizationId).channel.findFirst({
       where: { id: channelId, status: { not: 'DISCONNECTED' } },
@@ -369,8 +383,9 @@ export class ChannelsService {
         take: 50,
       });
 
-      const localPosts = localTargets.map((t) => {
+      const localPosts = await Promise.all(localTargets.map(async (t) => {
         const firstMedia = t.post.media[0]?.media;
+        const mediaUrl = await this.localVideoUrl(firstMedia);
         const text = t.textOverride || t.post.text || 'WhatsApp Post';
         const isVideo = firstMedia?.mimeType?.startsWith('video/') ?? false;
         const title = text.slice(0, 80) + (text.length > 80 ? '...' : '');
@@ -393,9 +408,10 @@ export class ChannelsService {
             : '0:00',
           isShort: false,
           url: session?.phoneNumber ? `https://wa.me/${session.phoneNumber}` : '',
+          mediaUrl,
           status: t.status,
         };
-      });
+      }));
 
       return {
         id: channel.id,
@@ -449,8 +465,9 @@ export class ChannelsService {
       take: 50,
     });
 
-    const localPosts = localTargets.map((t) => {
+    const localPosts = await Promise.all(localTargets.map(async (t) => {
       const firstMedia = t.post.media[0]?.media;
+      const mediaUrl = await this.localVideoUrl(firstMedia);
       const text = t.textOverride || t.post.text || 'Mehwar Flow Post';
       const isVideo = firstMedia?.mimeType?.startsWith('video/') ?? false;
       const title = text.slice(0, 80) + (text.length > 80 ? '...' : '');
@@ -477,13 +494,16 @@ export class ChannelsService {
           (channel.platform === 'linkedin'
             ? 'https://www.linkedin.com/feed/'
             : ''),
+        mediaUrl,
         status: t.status,
       };
-    });
+    }));
 
     const existingIds = new Set((details.videos ?? []).map((v: any) => v.id));
     const mergedVideos = [...(details.videos ?? [])];
     for (const lp of localPosts) {
+      const remote = mergedVideos.find((v: any) => v.id === lp.id);
+      if (remote && !remote.mediaUrl && lp.mediaUrl) remote.mediaUrl = lp.mediaUrl;
       if (!existingIds.has(lp.id)) {
         existingIds.add(lp.id);
         mergedVideos.push(lp);
@@ -935,12 +955,13 @@ export class ChannelsService {
   ): Promise<string> {
     if (platform === 'whatsapp') {
       const origin = this.resolveOrigin(clientOrigin, platform);
-      return `${origin}/settings?tab=whatsapp&scan=true`;
+      return `${origin}/settings?tab=networks`;
     }
     const connector = this.connectors.get(platform);
     const state = randomToken(24);
     const pkce = connector.usesPkce ? createPkcePair() : undefined;
-    const origin = this.resolveOrigin(clientOrigin, platform);
+    const isMobile = clientOrigin === 'mehwar://' || clientOrigin?.startsWith('mehwar://');
+    const origin = this.resolveOrigin(isMobile ? undefined : clientOrigin, platform);
     const redirectUri = this.redirectUri(platform, origin);
     const data: OAuthState = {
       organizationId,
@@ -948,7 +969,7 @@ export class ChannelsService {
       platform,
       verifier: pkce?.verifier,
       redirectUri,
-      origin: clientOrigin ? clientOrigin.replace(/\/$/, '') : origin,
+      origin: isMobile ? 'mehwar://' : (clientOrigin ? clientOrigin.replace(/\/$/, '') : origin),
     };
     await this.redis.set(`oauth:state:${state}`, JSON.stringify(data), 'EX', STATE_TTL);
     return connector.getAuthUrl({

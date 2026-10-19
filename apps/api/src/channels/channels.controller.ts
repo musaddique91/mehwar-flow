@@ -134,10 +134,13 @@ export class ChannelsController {
     @CurrentAuth() auth: AuthContext,
     @Param('platform', platformPipe) platform: Platform,
     @Req() req: Request,
+    @Query('client') client?: string,
   ) {
-    const clientOrigin =
-      (req.headers.origin as string) ||
-      (req.headers.referer ? new URL(req.headers.referer).origin : undefined);
+    const isMobile = client === 'mobile' || req.headers['x-client'] === 'mobile';
+    const clientOrigin = isMobile
+      ? 'mehwar://'
+      : (req.headers.origin as string) ||
+        (req.headers.referer ? new URL(req.headers.referer).origin : undefined);
     return {
       url: await this.channels.startConnect(
         auth.organizationId,
@@ -158,6 +161,10 @@ export class ChannelsController {
   ) {
     const result = await this.channels.handleCallback(platform, query);
     const origin = result.origin || this.channels.webOrigin;
+    if (origin === 'mehwar://' || origin.startsWith('mehwar://')) {
+      const cleanPath = result.path.replace(/^\/+/, '');
+      return res.redirect(302, `mehwar://${cleanPath}`);
+    }
     res.redirect(302, `${origin}${result.path}`);
   }
 

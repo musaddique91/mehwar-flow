@@ -186,4 +186,5 @@ export interface AuthResponse {
   accessToken: string;
   expiresIn: number;
   user: UserDto;
+  refreshToken?: string;
 }

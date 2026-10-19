@@ -40,30 +40,39 @@ class PostsService {
   Future<PostDto> createPost({
     required String text,
     String? firstComment,
-    String? scheduledAt,
     List<String>? mediaIds,
-    required List<Map<String, dynamic>> targets,
+    required List<dynamic> targets,
+    String? localDateTime,
+    String? timezone,
   }) async {
     try {
+      final serializedTargets = targets.map((t) {
+        if (t is TargetInput) return t.toJson();
+        if (t is Map<String, dynamic>) return t;
+        return t;
+      }).toList();
+
       final payload = <String, dynamic>{
         'text': text,
-        'targets': targets,
+        'targets': serializedTargets,
+        'mediaIds': mediaIds ?? [],
       };
       if (firstComment != null && firstComment.isNotEmpty) {
         payload['firstComment'] = firstComment;
       }
-      if (scheduledAt != null && scheduledAt.isNotEmpty) {
-        payload['scheduledAt'] = scheduledAt;
-      }
-      if (mediaIds != null && mediaIds.isNotEmpty) {
-        payload['mediaIds'] = mediaIds;
-      }
 
       final res = await _client.dio.post('/posts', data: payload);
-      return PostDto.fromJson(res.data as Map<String, dynamic>);
+      var post = PostDto.fromJson(res.data as Map<String, dynamic>);
+
+      // If scheduled time was provided, schedule it via the dedicated endpoint
+      if (localDateTime != null && localDateTime.isNotEmpty) {
+        final tz = timezone ?? 'UTC';
+        post = await schedulePost(post.id, localDateTime: localDateTime, timezone: tz);
+      }
+
+      return post;
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? e.message ?? 'Failed to create post';
-      throw ApiException(msg is List ? msg.join(', ') : msg.toString(), statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to create post');
     }
   }
 
@@ -71,24 +80,36 @@ class PostsService {
     required String id,
     required String text,
     String? firstComment,
-    String? scheduledAt,
     List<String>? mediaIds,
-    required List<Map<String, dynamic>> targets,
+    required List<dynamic> targets,
+    String? localDateTime,
+    String? timezone,
   }) async {
     try {
+      final serializedTargets = targets.map((t) {
+        if (t is TargetInput) return t.toJson();
+        if (t is Map<String, dynamic>) return t;
+        return t;
+      }).toList();
+
       final payload = <String, dynamic>{
         'text': text,
-        'targets': targets,
+        'targets': serializedTargets,
+        if (mediaIds != null) 'mediaIds': mediaIds,
       };
       if (firstComment != null) payload['firstComment'] = firstComment;
-      if (scheduledAt != null) payload['scheduledAt'] = scheduledAt;
-      if (mediaIds != null) payload['mediaIds'] = mediaIds;
 
       final res = await _client.dio.patch('/posts/$id', data: payload);
-      return PostDto.fromJson(res.data as Map<String, dynamic>);
+      var post = PostDto.fromJson(res.data as Map<String, dynamic>);
+
+      if (localDateTime != null && localDateTime.isNotEmpty) {
+        final tz = timezone ?? 'UTC';
+        post = await schedulePost(post.id, localDateTime: localDateTime, timezone: tz);
+      }
+
+      return post;
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? e.message ?? 'Failed to update post';
-      throw ApiException(msg is List ? msg.join(', ') : msg.toString(), statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to update post');
     }
   }
 
@@ -96,7 +117,7 @@ class PostsService {
     try {
       await _client.dio.delete('/posts/$id');
     } on DioException catch (e) {
-      throw ApiException(e.message ?? 'Failed to delete post', statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to delete post');
     }
   }
 
@@ -105,18 +126,45 @@ class PostsService {
       final res = await _client.dio.post('/posts/$id/publish-now');
       return PostDto.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? e.message ?? 'Failed to publish post';
-      throw ApiException(msg is List ? msg.join(', ') : msg.toString(), statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to publish post');
     }
   }
 
-  Future<PostDto> schedulePost(String id, String scheduledAt) async {
+  Future<PostDto> schedulePost(
+    String id, {
+    required String localDateTime,
+    required String timezone,
+  }) async {
     try {
-      final res = await _client.dio.post('/posts/$id/schedule', data: {'scheduledAt': scheduledAt});
+      final res = await _client.dio.post(
+        '/posts/$id/schedule',
+        data: {
+          'localDateTime': localDateTime,
+          'timezone': timezone,
+        },
+      );
       return PostDto.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? e.message ?? 'Failed to schedule post';
-      throw ApiException(msg is List ? msg.join(', ') : msg.toString(), statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to schedule post');
+    }
+  }
+
+  Future<PostDto> crossPost(
+    String id, {
+    required List<String> channelIds,
+    String? textOverride,
+  }) async {
+    try {
+      final res = await _client.dio.post(
+        '/posts/$id/cross-post',
+        data: {
+          'channelIds': channelIds,
+          if (textOverride != null && textOverride.isNotEmpty) 'textOverride': textOverride,
+        },
+      );
+      return PostDto.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e, 'Failed to cross-post');
     }
   }
 
@@ -125,16 +173,62 @@ class PostsService {
       final res = await _client.dio.post('/posts/$id/cancel');
       return PostDto.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw ApiException(e.message ?? 'Failed to cancel post', statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to cancel post');
     }
   }
+
+  Future<PostDto> cancelSchedule(String id) => cancelPost(id);
 
   Future<PostDto> retryPost(String id) async {
     try {
       final res = await _client.dio.post('/posts/$id/retry');
       return PostDto.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw ApiException(e.message ?? 'Failed to retry post', statusCode: e.response?.statusCode);
+      throw ApiException.fromDio(e, 'Failed to retry post');
+    }
+  }
+
+  // ---------- Posting Slots ----------
+
+  Future<List<Map<String, dynamic>>> getSlots() async {
+    try {
+      final res = await _client.dio.get('/slots');
+      return (res.data as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e, 'Failed to load posting slots');
+    }
+  }
+
+  Future<Map<String, dynamic>> addSlot({required int weekday, required int minuteOfDay}) async {
+    try {
+      final res = await _client.dio.post('/slots', data: {
+        'weekday': weekday,
+        'minuteOfDay': minuteOfDay,
+      });
+      return Map<String, dynamic>.from(res.data as Map);
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e, 'Failed to add posting slot');
+    }
+  }
+
+  Future<void> removeSlot(String id) async {
+    try {
+      await _client.dio.delete('/slots/$id');
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e, 'Failed to delete slot');
+    }
+  }
+
+  Future<({String localDateTime, String timezone})> getNextFreeSlot() async {
+    try {
+      final res = await _client.dio.get('/slots/next-free');
+      final data = res.data as Map<String, dynamic>;
+      return (
+        localDateTime: data['localDateTime'] as String,
+        timezone: data['timezone'] as String,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e, 'Failed to get next free slot');
     }
   }
 }

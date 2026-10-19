@@ -22,12 +22,15 @@ import {
  */
 export class SnapchatConnector implements PlatformConnector {
   readonly platform = 'snapchat' as const;
+  // Only the permissions the Snap console offers under Login Kit (Display Name, Bitmoji Avatar).
+  // The external id comes back from the /v1/me query without a separate scope.
   readonly scopes = [
     'https://auth.snapchat.com/oauth2/api/user.display_name',
     'https://auth.snapchat.com/oauth2/api/user.bitmoji.avatar',
-    'https://auth.snapchat.com/oauth2/api/user.external_id',
   ];
-  readonly usesPkce = true;
+  // Our Snap client is a Confidential OAuth client (authenticates with its secret), so no PKCE.
+  // Sending a code_challenge with it makes Snap reject the request as invalid_request.
+  readonly usesPkce = false;
 
   constructor(
     private readonly client: OAuthClientConfig,

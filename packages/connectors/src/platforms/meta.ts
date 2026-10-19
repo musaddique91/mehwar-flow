@@ -287,10 +287,16 @@ export class FacebookConnector extends MetaConnector implements PlatformConnecto
       duration: string;
       isShort: boolean;
       url: string;
+      mediaUrl?: string | null;
     }> = [];
 
     const mapPost = (p: any) => {
       const msg = p.message || p.story || '';
+      const attachments: any[] = p.attachments?.data ?? [];
+      const videoAtt = attachments.find(
+        (a) => a?.media_type === 'video' || a?.type?.startsWith?.('video') || a?.media?.source,
+      );
+      const mediaUrl: string | null = videoAtt?.media?.source ?? null;
       return {
         id: p.id,
         title: msg ? (msg.split('\n')[0] || 'Facebook Post').slice(0, 100) : 'Facebook Post',
@@ -303,11 +309,14 @@ export class FacebookConnector extends MetaConnector implements PlatformConnecto
         duration: '',
         isShort: false,
         url: p.permalink_url ?? `https://www.facebook.com/${p.id}`,
+        mediaUrl,
+        mediaType: videoAtt ? 'VIDEO' : 'IMAGE',
       };
     };
 
     const endpoints = ['published_posts', 'feed', 'posts'];
     const fieldOptions = [
+      'id,message,story,created_time,full_picture,permalink_url,shares,reactions.summary(true),comments.summary(true),attachments{media_type,type,url,media{source}}',
       'id,message,story,created_time,full_picture,permalink_url,shares,reactions.summary(true),comments.summary(true)',
       'id,message,story,created_time,full_picture,permalink_url,shares',
       'id,message,story,created_time,full_picture,permalink_url',
